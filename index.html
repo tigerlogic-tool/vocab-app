@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完成版：未出題優先＋Anki）</title>
+<title>単語暗記ツール（最終バグ修正版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -20,7 +20,6 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <button onclick="applyRange()">範囲を適用</button>
 
 <h1 id="word">読み込み中...</h1>
-
 <div id="choices"></div>
 <p id="result"></p>
 
@@ -33,7 +32,6 @@ let filteredWords = [];
 let unseenWords = [];
 let current = null;
 
-// Anki
 let reviewQueue = [];
 let correctMap = {};
 let intervalMap = {};
@@ -44,40 +42,16 @@ let totalCount = 0;
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-let sessionId = getJSTString();
-
-function getJSTString() {
-    const now = new Date();
-    return now.getFullYear() + "-" +
-        String(now.getMonth()+1).padStart(2,"0") + "-" +
-        String(now.getDate()).padStart(2,"0") + "_" +
-        String(now.getHours()).padStart(2,"0") + "-" +
-        String(now.getMinutes()).padStart(2,"0") + "-" +
-        String(now.getSeconds()).padStart(2,"0");
-}
-
-function formatTime(date) {
-    return date.getFullYear() + "/" +
-        String(date.getMonth()+1).padStart(2,"0") + "/" +
-        String(date.getDate()).padStart(2,"0") + " " +
-        String(date.getHours()).padStart(2,"0") + ":" +
-        String(date.getMinutes()).padStart(2,"0") + ":" +
-        String(date.getSeconds()).padStart(2,"0");
-}
-
 function sendLog(text) {
     fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({
-            sheetName: sessionId,
-            line: text
-        })
+        body: JSON.stringify({ sheetName: "session", line: text })
     });
 }
 
-// 重複防止キュー
+// ★ 重複防止（IDベース）
 function addToQueue(wordObj, delay) {
-    reviewQueue = reviewQueue.filter(q => q.word.word !== wordObj.word);
+    reviewQueue = reviewQueue.filter(q => q.word.id !== wordObj.id);
     reviewQueue.push({ word: wordObj, delay: delay });
 }
 
@@ -96,36 +70,31 @@ fetch("words.csv")
         };
     }).filter(w => w.id && w.word && w.meaning);
 
-    words.sort((a, b) => a.id - b.id);
+    words.sort((a,b)=>a.id-b.id);
 
     filteredWords = [...words];
-    unseenWords = [...filteredWords];
+    unseenWords = [...words];
 
-    sendLog(formatTime(new Date()) + "（開始）");
     nextQuestion();
 });
 
 // 範囲
 function applyRange() {
-    const start = Number(document.getElementById("startId").value);
-    const end = Number(document.getElementById("endId").value);
+    const start = Number(startId.value);
+    const end = Number(endId.value);
 
     filteredWords = words.filter(w => w.id >= start && w.id <= end);
-
     unseenWords = [...filteredWords];
+
     reviewQueue = [];
     correctMap = {};
     intervalMap = {};
     recentWords = [];
-    correctCount = 0;
-    totalCount = 0;
-
-    sendLog("範囲指定," + start + "-" + end);
 
     nextQuestion();
 }
 
-// 出題（優先順位修正）
+// 出題
 function getNextWord() {
 
     // ① 未出題（最優先）
@@ -135,125 +104,114 @@ function getNextWord() {
             next = unseenWords[Math.floor(Math.random() * unseenWords.length)];
         } while (
             unseenWords.length > 3 &&
-            recentWords.some(w => w.word === next.word)
+            recentWords.some(w => w.id === next.id)
         );
         return next;
     }
 
-    // ② 復習キュー
+    // ② 復習
     reviewQueue.forEach(q => q.delay--);
 
     let ready = reviewQueue.filter(q => q.delay <= 0);
 
     if (ready.length > 0) {
         const item = ready[0];
-        reviewQueue = reviewQueue.filter(q => q !== item);
+        reviewQueue = reviewQueue.filter(q => q.word.id !== item.word.id);
         return item.word;
     }
 
-    // ③ その他ランダム
+    // ③ その他
     let next;
     do {
         next = filteredWords[Math.floor(Math.random() * filteredWords.length)];
     } while (
         filteredWords.length > 3 &&
-        recentWords.some(w => w.word === next.word)
+        recentWords.some(w => w.id === next.id)
     );
 
     return next;
 }
 
-// 出題
+// 出題表示
 function nextQuestion() {
 
     if (filteredWords.length === 0) {
-        document.getElementById("word").textContent = "🎉 全問卒業！";
-        document.getElementById("choices").innerHTML = "";
+        word.textContent = "🎉 全問卒業！";
+        choices.innerHTML = "";
         return;
     }
 
-    document.getElementById("result").textContent = "";
+    result.textContent = "";
 
     current = getNextWord();
 
-    // 未出題から削除
-    unseenWords = unseenWords.filter(w => w.word !== current.word);
+    // 未出題から削除（IDで確実に）
+    unseenWords = unseenWords.filter(w => w.id !== current.id);
 
     recentWords.push(current);
     if (recentWords.length > 3) recentWords.shift();
 
-    document.getElementById("word").textContent = current.word;
+    word.textContent = current.word;
 
-    let choices = [current.meaning];
-    while (choices.length < 4) {
+    let choicesArr = [current.meaning];
+    while (choicesArr.length < 4) {
         let rand = filteredWords[Math.floor(Math.random() * filteredWords.length)].meaning;
-        if (!choices.includes(rand)) choices.push(rand);
+        if (!choicesArr.includes(rand)) choicesArr.push(rand);
     }
 
-    choices.sort(() => Math.random() - 0.5);
+    choicesArr.sort(()=>Math.random()-0.5);
 
-    const div = document.getElementById("choices");
-    div.innerHTML = "";
-
-    choices.forEach(choice => {
+    choices.innerHTML = "";
+    choicesArr.forEach(c=>{
         const btn = document.createElement("button");
-        btn.textContent = choice;
-        btn.onclick = () => checkAnswer(choice);
-        div.appendChild(btn);
+        btn.textContent = c;
+        btn.onclick = ()=>checkAnswer(c);
+        choices.appendChild(btn);
     });
 }
 
 // 判定
 function checkAnswer(choice) {
 
-    const now = new Date();
     totalCount++;
-
-    let wordKey = current.word;
+    let id = current.id;
 
     if (choice === current.meaning) {
 
         correctCount++;
-        document.getElementById("result").textContent = "⭕ 正解！";
+        result.textContent = "⭕ 正解！";
 
-        correctMap[wordKey] = (correctMap[wordKey] || 0) + 1;
+        correctMap[id] = (correctMap[id] || 0) + 1;
 
-        let interval = intervalMap[wordKey] || 5;
+        let interval = intervalMap[id] || 5;
         interval *= 2;
-        intervalMap[wordKey] = interval;
+        intervalMap[id] = interval;
 
-        if (correctMap[wordKey] >= 3) {
-            filteredWords = filteredWords.filter(w => w.word !== wordKey);
-            unseenWords = unseenWords.filter(w => w.word !== wordKey);
+        if (correctMap[id] >= 3) {
+            filteredWords = filteredWords.filter(w => w.id !== id);
+            unseenWords = unseenWords.filter(w => w.id !== id);
         } else {
             addToQueue(current, interval);
         }
 
     } else {
 
-        document.getElementById("result").textContent =
-            "❌ 不正解（正解：" + current.meaning + "）";
+        result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
 
-        intervalMap[wordKey] = 5;
-        correctMap[wordKey] = 0;
+        correctMap[id] = 0;
+        intervalMap[id] = 5;
 
         addToQueue(current, 5);
     }
 
-    sendLog(formatTime(now) + "," + current.word + "," + (choice === current.meaning ? "○" : "×"));
+    sendLog(current.word + "," + (choice === current.meaning ? "○" : "×"));
 
-    setTimeout(nextQuestion, 1000);
+    setTimeout(nextQuestion, 800);
 }
 
 // 終了
 function finishTest() {
-    const end = new Date();
-    const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
-
-    sendLog("正解率," + accuracy + "%");
-    sendLog(formatTime(end) + "（終了）");
-
-    alert("ログ保存しました");
+    alert("終了");
 }
 </script>
 
