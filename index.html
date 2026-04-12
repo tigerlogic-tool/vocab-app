@@ -2,169 +2,216 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記アプリ（4択）</title>
+<title>単語暗記ツール（最終完成版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: sans-serif; padding: 20px; }
-  #word { font-size: 32px; margin-bottom: 20px; }
-  .choice { 
-    display: block; 
-    width: 100%; 
-    padding: 12px; 
-    margin: 8px 0; 
-    font-size: 20px; 
-    cursor: pointer; 
-  }
-  #result { margin-top: 20px; font-size: 22px; }
-  #nextBtn { margin-top: 20px; padding: 10px 20px; font-size: 20px; display:none; }
+body { font-family: sans-serif; text-align: center; margin: 20px; }
+button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
+#result { font-size: 18px; margin-top: 10px; height: 24px; }
+.mode-btn { background: #eee; }
+.active { background: #4CAF50; color: white; }
 </style>
 </head>
 <body>
 
-<h1>単語暗記アプリ（4択）</h1>
+<h1 id="word">読み込み中...</h1>
 
-<div id="word">読み込み中...</div>
+<button class="mode-btn active" onclick="setMode('normal')" id="normalBtn">通常モード</button>
+<button class="mode-btn" onclick="setMode('review')" id="reviewBtn">復習モード</button>
+<button onclick="resetMistakes()">復習リセット</button>
 
 <div id="choices"></div>
+<p id="result"></p>
 
-<div id="result"></div>
-
-<button id="nextBtn" onclick="nextQuestion()">次の問題へ</button>
+<br>
+<button onclick="finishTest()">テスト終了（ログ保存）</button>
 
 <script>
-// ===============================
-// 設定
-// ===============================
+let words = [];
+let mistakes = [];
+let current = null;
+let mode = "normal";
+
+let correctCount = 0;
+let totalCount = 0;
+
 // GAS
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxwOOLeeCFUgCDbtMwEWwXFh2JE5VF3mcG02W9zGY1s_k5jRFMpu1CAOEfY_a-pyY75mA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyiFLfbGL5UFrcQhYLn9E8cfQb1Rscl5q38Af1PWV6_W1TAHu9PN07GZOs4qX4tsxEODA/exec";
 
+// セッション名（日本時間）
+let sessionId = getJSTString();
 
-let wordList = [];   // {word, meaning}
-let master = [];     // GASから取得
-let current = null;  // 現在の出題単語
+function getJSTString() {
+    const now = new Date();
+    return now.getFullYear() + "-" +
+        String(now.getMonth()+1).padStart(2,"0") + "-" +
+        String(now.getDate()).padStart(2,"0") + "_" +
+        String(now.getHours()).padStart(2,"0") + "-" +
+        String(now.getMinutes()).padStart(2,"0") + "-" +
+        String(now.getSeconds()).padStart(2,"0");
+}
 
-// ===============================
-// words.csv を読み込み、単語＋意味を取得
-// ===============================
+// 時刻
+function formatTime(date) {
+    return date.getFullYear() + "/" +
+        String(date.getMonth()+1).padStart(2,"0") + "/" +
+        String(date.getDate()).padStart(2,"0") + " " +
+        String(date.getHours()).padStart(2,"0") + ":" +
+        String(date.getMinutes()).padStart(2,"0") + ":" +
+        String(date.getSeconds()).padStart(2,"0");
+}
+
+// ログ送信
+function sendLog(text) {
+    fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({
+            sheetName: sessionId,
+            line: text
+        })
+    });
+}
+
+// ★ CSV読み込み（番号付き）
 fetch("words.csv")
-  .then(res => res.text())
-  .then(text => {
-      wordList = text
-        .split("\n")
-        .map(r => r.split(","))
-        .filter(row => row.length >= 3)
-        .map(row => ({
-          word: row[1].trim(),
-          meaning: row[2].trim()
-        }));
+.then(res => res.text())
+.then(text => {
+    let lines = text.split(/\r?\n/);
 
-      loadMaster();
-  });
+    words = lines.map(line => {
+        const [id, word, meaning] = line.split(",");
+        return {
+            id: Number(id),
+            word: word?.trim(),
+            meaning: meaning?.trim()
+        };
+    }).filter(w => w.id && w.word && w.meaning);
 
-// ===============================
-// Master を取得
-// ===============================
-async function loadMaster() {
-  const res = await fetch(GAS_URL + "?type=getMaster");
-  master = await res.json();
-  nextQuestion();
+    // ID順
+    words.sort((a, b) => a.id - b.id);
+
+    correctCount = 0;
+    totalCount = 0;
+    mistakes = [];
+
+    sendLog(formatTime(new Date()) + "（開始）");
+    sendLog("INPUT：words.csv");
+
+    nextQuestion();
+});
+
+// モード
+function setMode(m) {
+    mode = m;
+    document.getElementById("normalBtn").classList.remove("active");
+    document.getElementById("reviewBtn").classList.remove("active");
+
+    if (m === "normal") {
+        document.getElementById("normalBtn").classList.add("active");
+    } else {
+        document.getElementById("reviewBtn").classList.add("active");
+    }
+
+    nextQuestion();
 }
 
-// ===============================
-// 出題ロジック（Master の再出題対象？＝○）
-// ===============================
+// ★ 出題ロジック（核心）
+function getNextWord(source) {
+
+    // ① 復習モードはミス優先
+    if (mode === "review" && mistakes.length > 0) {
+        return mistakes[Math.floor(Math.random() * mistakes.length)];
+    }
+
+    // ② 通常モードでもミスを優先（確率高め）
+    if (mistakes.length > 0 && Math.random() < 0.5) {
+        return mistakes[Math.floor(Math.random() * mistakes.length)];
+    }
+
+    // ③ 若い番号優先＋ランダム
+    const max = Math.min(10, source.length);
+    const subset = source.slice(0, max);
+
+    return subset[Math.floor(Math.random() * subset.length)];
+}
+
+// 出題
 function nextQuestion() {
-  document.getElementById("result").innerText = "";
-  document.getElementById("nextBtn").style.display = "none";
+    document.getElementById("result").textContent = "";
 
-  const candidates = master.filter(m => m.retest === "○");
+    let source = (mode === "review") ? mistakes : words;
 
-  if (candidates.length === 0) {
-    document.getElementById("word").innerText = "出題対象の単語がありません";
-    document.getElementById("choices").innerHTML = "";
-    return;
-  }
+    if (source.length < 4) {
+        document.getElementById("word").textContent =
+            mode === "review" ? "復習データが足りません" : "単語が足りません";
+        document.getElementById("choices").innerHTML = "";
+        return;
+    }
 
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  current = wordList.find(w => w.word === pick.word);
+    current = getNextWord(source);
+    document.getElementById("word").textContent = current.word;
 
-  document.getElementById("word").innerText = current.word;
+    let choices = [current.meaning];
+    while (choices.length < 4) {
+        let rand = words[Math.floor(Math.random() * words.length)].meaning;
+        if (!choices.includes(rand)) choices.push(rand);
+    }
 
-  createChoices(current);
+    choices.sort(() => Math.random() - 0.5);
+
+    const div = document.getElementById("choices");
+    div.innerHTML = "";
+
+    choices.forEach(choice => {
+        const btn = document.createElement("button");
+        btn.textContent = choice;
+        btn.onclick = () => checkAnswer(choice);
+        div.appendChild(btn);
+    });
 }
 
-// ===============================
-// 4択生成
-// ===============================
-function createChoices(target) {
-  const choicesDiv = document.getElementById("choices");
-  choicesDiv.innerHTML = "";
+// 判定
+function checkAnswer(choice) {
+    const now = new Date();
+    totalCount++;
 
-  const wrong = wordList
-    .filter(w => w.word !== target.word)
-    .map(w => w.meaning);
+    let result;
 
-  shuffle(wrong);
+    if (choice === current.meaning) {
+        result = "○";
+        correctCount++;
+        document.getElementById("result").textContent = "⭕ 正解！";
+    } else {
+        result = "×";
+        document.getElementById("result").textContent =
+            "❌ 不正解（正解：" + current.meaning + "）";
 
-  const options = [target.meaning, ...wrong.slice(0, 3)];
-  shuffle(options);
+        if (!mistakes.some(w => w.word === current.word)) {
+            mistakes.push(current);
+        }
+    }
 
-  options.forEach(opt => {
-    const btn = document.createElement("button");
-    btn.className = "choice";
-    btn.innerText = opt;
-    btn.onclick = () => checkAnswer(opt);
-    choicesDiv.appendChild(btn);
-  });
+    sendLog(formatTime(now) + "," + current.word + "," + result);
+
+    setTimeout(nextQuestion, 1000);
 }
 
-// ===============================
-// 正誤判定
-// ===============================
-function checkAnswer(selected) {
-  const isCorrect = (selected === current.meaning);
-
-  document.getElementById("result").innerText =
-    isCorrect
-      ? `正解！ → ${current.meaning}`
-      : `不正解… 正解は「${current.meaning}」`;
-
-  sendResult(isCorrect);
-
-  document.getElementById("nextBtn").style.display = "block";
+// リセット
+function resetMistakes() {
+    mistakes = [];
+    alert("復習データをリセットしました");
 }
 
-// ===============================
-// GAS へ結果送信
-// ===============================
-function sendResult(isCorrect) {
-  const payload = {
-    type: "updateMaster",
-    word: current.word,
-    deltaScore: isCorrect ? +1 : -2,
-    lastCorrectDate: isCorrect ? formatDate(new Date()) : null
-  };
+// 終了
+function finishTest() {
+    const end = new Date();
+    const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
-  fetch(GAS_URL, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  }).then(() => loadMaster());
-}
+    sendLog("累計正解," + correctCount + ",累計問題数," + totalCount);
+    sendLog("正解率," + accuracy + "%");
+    sendLog(formatTime(end) + "（終了）");
 
-// ===============================
-// ユーティリティ
-// ===============================
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-function formatDate(d) {
-  const y = d.getFullYear();
-  const m = ("0" + (d.getMonth()+1)).slice(-2);
-  const day = ("0" + d.getDate()).slice(-2);
-  return `${y}/${m}/${day}`;
+    alert("ログ保存しました");
 }
 </script>
 
