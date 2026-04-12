@@ -2,14 +2,13 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完成版）</title>
+<title>単語暗記ツール（最終バグ修正版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
 button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
 input { padding: 8px; margin: 5px; width: 100px; }
-#nextBtn { background: #ff9800; color: white; display: none; }
 </style>
 </head>
 <body>
@@ -21,11 +20,8 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <button onclick="applyRange()">範囲を適用</button>
 
 <h1 id="word">読み込み中...</h1>
-
 <div id="choices"></div>
 <p id="result"></p>
-
-<button id="nextBtn" onclick="nextQuestion()">次へ</button>
 
 <br>
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
@@ -53,13 +49,13 @@ function sendLog(text) {
     });
 }
 
-// 重複防止キュー（IDベース）
+// ★ 重複防止（IDベース）
 function addToQueue(wordObj, delay) {
     reviewQueue = reviewQueue.filter(q => q.word.id !== wordObj.id);
     reviewQueue.push({ word: wordObj, delay: delay });
 }
 
-// CSV読み込み
+// CSV
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -82,7 +78,7 @@ fetch("words.csv")
     nextQuestion();
 });
 
-// 範囲指定
+// 範囲
 function applyRange() {
     const start = Number(startId.value);
     const end = Number(endId.value);
@@ -95,13 +91,10 @@ function applyRange() {
     intervalMap = {};
     recentWords = [];
 
-    correctCount = 0;
-    totalCount = 0;
-
     nextQuestion();
 }
 
-// 出題ロジック
+// 出題
 function getNextWord() {
 
     // ① 未出題（最優先）
@@ -139,10 +132,8 @@ function getNextWord() {
     return next;
 }
 
-// 出題
+// 出題表示
 function nextQuestion() {
-
-    document.getElementById("nextBtn").style.display = "none";
 
     if (filteredWords.length === 0) {
         word.textContent = "🎉 全問卒業！";
@@ -154,7 +145,7 @@ function nextQuestion() {
 
     current = getNextWord();
 
-    // 未出題から削除
+    // 未出題から削除（IDで確実に）
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
     recentWords.push(current);
@@ -203,9 +194,6 @@ function checkAnswer(choice) {
             addToQueue(current, interval);
         }
 
-        // 正解 → 自動
-        setTimeout(nextQuestion, 800);
-
     } else {
 
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
@@ -214,18 +202,15 @@ function checkAnswer(choice) {
         intervalMap[id] = 5;
 
         addToQueue(current, 5);
-
-        // 不正解 → ボタン待ち
-        document.getElementById("nextBtn").style.display = "inline-block";
     }
 
     sendLog(current.word + "," + (choice === current.meaning ? "○" : "×"));
+
+    setTimeout(nextQuestion, 800);
 }
 
 // 終了
 function finishTest() {
-    const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
-    sendLog("正解率," + accuracy + "%");
     alert("終了");
 }
 </script>
