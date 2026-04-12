@@ -2,12 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終バグ修正版）</title>
+<title>単語暗記ツール（最終完成版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
 button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
+#summary { margin-top:20px; font-size:20px; font-weight:bold; }
+#nextBtn { background: #ff9800; color: white; display: none; }
 input { padding: 8px; margin: 5px; width: 100px; }
 </style>
 </head>
@@ -20,8 +22,13 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <button onclick="applyRange()">範囲を適用</button>
 
 <h1 id="word">読み込み中...</h1>
+
 <div id="choices"></div>
 <p id="result"></p>
+
+<button id="nextBtn" onclick="nextQuestion()">次へ</button>
+
+<div id="summary"></div>
 
 <br>
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
@@ -40,16 +47,44 @@ let recentWords = [];
 let correctCount = 0;
 let totalCount = 0;
 
+// ★ GAS URL（そのまま使用）
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
+// ★ セッションID
+let sessionId = getJSTString();
+
+function getJSTString() {
+    const now = new Date();
+    return now.getFullYear() + "-" +
+        String(now.getMonth()+1).padStart(2,"0") + "-" +
+        String(now.getDate()).padStart(2,"0") + "_" +
+        String(now.getHours()).padStart(2,"0") + "-" +
+        String(now.getMinutes()).padStart(2,"0") + "-" +
+        String(now.getSeconds()).padStart(2,"0");
+}
+
+// 時刻フォーマット
+function formatTime(date) {
+    return date.getFullYear() + "/" +
+        String(date.getMonth()+1).padStart(2,"0") + "/" +
+        String(date.getDate()).padStart(2,"0") + " " +
+        String(date.getHours()).padStart(2,"0") + ":" +
+        String(date.getMinutes()).padStart(2,"0") + ":" +
+        String(date.getSeconds()).padStart(2,"0");
+}
+
+// ★ ログ送信（修正版）
 function sendLog(text) {
     fetch(GAS_URL, {
         method: "POST",
-        body: JSON.stringify({ sheetName: "session", line: text })
+        body: JSON.stringify({
+            sheetName: sessionId,
+            line: text
+        })
     });
 }
 
-// ★ 重複防止（IDベース）
+// キュー
 function addToQueue(wordObj, delay) {
     reviewQueue = reviewQueue.filter(q => q.word.id !== wordObj.id);
     reviewQueue.push({ word: wordObj, delay: delay });
@@ -75,6 +110,10 @@ fetch("words.csv")
     filteredWords = [...words];
     unseenWords = [...words];
 
+    // ★ 開始ログ
+    sendLog(formatTime(new Date()) + "（開始）");
+    sendLog("INPUT：words.csv");
+
     nextQuestion();
 });
 
@@ -91,13 +130,17 @@ function applyRange() {
     intervalMap = {};
     recentWords = [];
 
+    correctCount = 0;
+    totalCount = 0;
+
+    sendLog("範囲指定," + start + "-" + end);
+
     nextQuestion();
 }
 
 // 出題
 function getNextWord() {
 
-    // ① 未出題（最優先）
     if (unseenWords.length > 0) {
         let next;
         do {
@@ -109,7 +152,6 @@ function getNextWord() {
         return next;
     }
 
-    // ② 復習
     reviewQueue.forEach(q => q.delay--);
 
     let ready = reviewQueue.filter(q => q.delay <= 0);
@@ -120,7 +162,6 @@ function getNextWord() {
         return item.word;
     }
 
-    // ③ その他
     let next;
     do {
         next = filteredWords[Math.floor(Math.random() * filteredWords.length)];
@@ -135,6 +176,8 @@ function getNextWord() {
 // 出題表示
 function nextQuestion() {
 
+    nextBtn.style.display = "none";
+
     if (filteredWords.length === 0) {
         word.textContent = "🎉 全問卒業！";
         choices.innerHTML = "";
@@ -145,7 +188,6 @@ function nextQuestion() {
 
     current = getNextWord();
 
-    // 未出題から削除（IDで確実に）
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
     recentWords.push(current);
@@ -173,10 +215,13 @@ function nextQuestion() {
 // 判定
 function checkAnswer(choice) {
 
+    const now = new Date();
     totalCount++;
     let id = current.id;
 
-    if (choice === current.meaning) {
+    let isCorrect = (choice === current.meaning);
+
+    if (isCorrect) {
 
         correctCount++;
         result.textContent = "⭕ 正解！";
@@ -194,6 +239,8 @@ function checkAnswer(choice) {
             addToQueue(current, interval);
         }
 
+        setTimeout(nextQuestion, 800);
+
     } else {
 
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
@@ -202,16 +249,49 @@ function checkAnswer(choice) {
         intervalMap[id] = 5;
 
         addToQueue(current, 5);
+
+        nextBtn.style.display = "inline-block";
     }
 
-    sendLog(current.word + "," + (choice === current.meaning ? "○" : "×"));
-
-    setTimeout(nextQuestion, 800);
+    sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
 // 終了
 function finishTest() {
-    alert("終了");
+
+    const end = new Date();
+    const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
+
+    let rank;
+    if (accuracy >= 90) rank = "S";
+    else if (accuracy >= 75) rank = "A";
+    else if (accuracy >= 60) rank = "B";
+    else rank = "C";
+
+    let last = localStorage.getItem("lastScore");
+    let diffText = "";
+
+    if (last !== null) {
+        let diff = accuracy - Number(last);
+        if (diff > 0) diffText = "⬆ +" + diff + "%";
+        else if (diff < 0) diffText = "⬇ " + diff + "%";
+        else diffText = "→ ±0%";
+    }
+
+    localStorage.setItem("lastScore", accuracy);
+
+    summary.innerHTML =
+        "📊 成績<br>" +
+        "正解数：" + correctCount + "<br>" +
+        "問題数：" + totalCount + "<br>" +
+        "正解率：" + accuracy + "%<br>" +
+        "評価：" + rank +
+        (diffText ? "<br>前回比：" + diffText : "");
+
+    sendLog("正解数," + correctCount);
+    sendLog("問題数," + totalCount);
+    sendLog("正解率," + accuracy + "%");
+    sendLog(formatTime(end) + "（終了）");
 }
 </script>
 
