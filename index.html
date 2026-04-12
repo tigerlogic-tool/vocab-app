@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（範囲指定対応版）</title>
+<title>単語暗記ツール（忘却曲線対応版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -23,10 +23,6 @@ input { padding: 8px; margin: 5px; width: 100px; }
 
 <h1 id="word">読み込み中...</h1>
 
-<button class="mode-btn active" onclick="setMode('normal')" id="normalBtn">通常モード</button>
-<button class="mode-btn" onclick="setMode('review')" id="reviewBtn">復習モード</button>
-<button onclick="resetMistakes()">復習リセット</button>
-
 <div id="choices"></div>
 <p id="result"></p>
 
@@ -36,17 +32,16 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <script>
 let words = [];
 let filteredWords = [];
-let mistakes = [];
 let current = null;
-let mode = "normal";
+
+// 忘却曲線キュー
+let reviewQueue = [];
 
 let correctCount = 0;
 let totalCount = 0;
 
-// GAS
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-// セッション名
 let sessionId = getJSTString();
 
 function getJSTString() {
@@ -68,7 +63,6 @@ function formatTime(date) {
         String(date.getSeconds()).padStart(2,"0");
 }
 
-// ログ送信
 function sendLog(text) {
     fetch(GAS_URL, {
         method: "POST",
@@ -95,8 +89,6 @@ fetch("words.csv")
     }).filter(w => w.id && w.word && w.meaning);
 
     words.sort((a, b) => a.id - b.id);
-
-    // 初期は全範囲
     filteredWords = [...words];
 
     sendLog(formatTime(new Date()) + "（開始）");
@@ -105,7 +97,7 @@ fetch("words.csv")
     nextQuestion();
 });
 
-// 範囲適用
+// 範囲
 function applyRange() {
     const start = Number(document.getElementById("startId").value);
     const end = Number(document.getElementById("endId").value);
@@ -113,65 +105,48 @@ function applyRange() {
     filteredWords = words.filter(w => w.id >= start && w.id <= end);
 
     if (filteredWords.length < 4) {
-        alert("単語が少なすぎます（最低4つ必要）");
+        alert("単語が少なすぎます");
         return;
     }
 
     correctCount = 0;
     totalCount = 0;
-    mistakes = [];
+    reviewQueue = [];
 
     sendLog("範囲指定," + start + "-" + end);
 
     nextQuestion();
 }
 
-// モード
-function setMode(m) {
-    mode = m;
-    document.getElementById("normalBtn").classList.remove("active");
-    document.getElementById("reviewBtn").classList.remove("active");
+// ★ 忘却曲線ロジック
+function getNextWord() {
 
-    if (m === "normal") {
-        document.getElementById("normalBtn").classList.add("active");
-    } else {
-        document.getElementById("reviewBtn").classList.add("active");
+    // カウントダウン
+    reviewQueue.forEach(q => q.delay--);
+
+    // 出題可能な復習
+    let ready = reviewQueue.filter(q => q.delay <= 0);
+
+    if (ready.length > 0) {
+        const item = ready[0];
+        reviewQueue = reviewQueue.filter(q => q !== item);
+        return item.word;
     }
 
-    nextQuestion();
-}
-
-// 出題ロジック
-function getNextWord(source) {
-
-    if (mode === "review" && mistakes.length > 0) {
-        return mistakes[Math.floor(Math.random() * mistakes.length)];
-    }
-
-    if (mistakes.length > 0 && Math.random() < 0.5) {
-        return mistakes[Math.floor(Math.random() * mistakes.length)];
-    }
-
-    const max = Math.min(10, source.length);
-    const subset = source.slice(0, max);
-
-    return subset[Math.floor(Math.random() * subset.length)];
+    // 通常ランダム
+    return filteredWords[Math.floor(Math.random() * filteredWords.length)];
 }
 
 // 出題
 function nextQuestion() {
     document.getElementById("result").textContent = "";
 
-    let source = (mode === "review") ? mistakes : filteredWords;
-
-    if (source.length < 4) {
-        document.getElementById("word").textContent =
-            "単語が足りません";
-        document.getElementById("choices").innerHTML = "";
+    if (filteredWords.length < 4) {
+        document.getElementById("word").textContent = "単語不足";
         return;
     }
 
-    current = getNextWord(source);
+    current = getNextWord();
     document.getElementById("word").textContent = current.word;
 
     let choices = [current.meaning];
@@ -198,31 +173,22 @@ function checkAnswer(choice) {
     const now = new Date();
     totalCount++;
 
-    let result;
-
     if (choice === current.meaning) {
-        result = "○";
         correctCount++;
         document.getElementById("result").textContent = "⭕ 正解！";
     } else {
-        result = "×";
         document.getElementById("result").textContent =
             "❌ 不正解（正解：" + current.meaning + "）";
 
-        if (!mistakes.some(w => w.word === current.word)) {
-            mistakes.push(current);
-        }
+        // ★ 忘却曲線登録
+        reviewQueue.push({ word: current, delay: 2 });
+        reviewQueue.push({ word: current, delay: 5 });
+        reviewQueue.push({ word: current, delay: 10 });
     }
 
-    sendLog(formatTime(now) + "," + current.word + "," + result);
+    sendLog(formatTime(now) + "," + current.word + "," + (choice === current.meaning ? "○" : "×"));
 
     setTimeout(nextQuestion, 1000);
-}
-
-// リセット
-function resetMistakes() {
-    mistakes = [];
-    alert("復習データをリセットしました");
 }
 
 // 終了
@@ -230,7 +196,6 @@ function finishTest() {
     const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
-    sendLog("累計正解," + correctCount + ",累計問題数," + totalCount);
     sendLog("正解率," + accuracy + "%");
     sendLog(formatTime(end) + "（終了）");
 
