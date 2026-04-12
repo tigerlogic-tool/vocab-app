@@ -8,9 +8,8 @@
 body { font-family: sans-serif; text-align: center; margin: 20px; }
 button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
-#summary { margin-top:20px; font-size:20px; font-weight:bold; }
-#nextBtn { background: #ff9800; color: white; display: none; }
 input { padding: 8px; margin: 5px; width: 100px; }
+#nextBtn { background: #ff9800; color: white; display: none; }
 </style>
 </head>
 <body>
@@ -27,8 +26,6 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <p id="result"></p>
 
 <button id="nextBtn" onclick="nextQuestion()">次へ</button>
-
-<div id="summary"></div>
 
 <br>
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
@@ -56,13 +53,13 @@ function sendLog(text) {
     });
 }
 
-// 重複防止キュー
+// 重複防止キュー（IDベース）
 function addToQueue(wordObj, delay) {
     reviewQueue = reviewQueue.filter(q => q.word.id !== wordObj.id);
     reviewQueue.push({ word: wordObj, delay: delay });
 }
 
-// CSV
+// CSV読み込み
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -85,7 +82,7 @@ fetch("words.csv")
     nextQuestion();
 });
 
-// 範囲
+// 範囲指定
 function applyRange() {
     const start = Number(startId.value);
     const end = Number(endId.value);
@@ -104,10 +101,10 @@ function applyRange() {
     nextQuestion();
 }
 
-// 出題
+// 出題ロジック
 function getNextWord() {
 
-    // 未出題優先
+    // ① 未出題（最優先）
     if (unseenWords.length > 0) {
         let next;
         do {
@@ -119,7 +116,7 @@ function getNextWord() {
         return next;
     }
 
-    // 復習
+    // ② 復習
     reviewQueue.forEach(q => q.delay--);
 
     let ready = reviewQueue.filter(q => q.delay <= 0);
@@ -130,7 +127,7 @@ function getNextWord() {
         return item.word;
     }
 
-    // その他
+    // ③ その他
     let next;
     do {
         next = filteredWords[Math.floor(Math.random() * filteredWords.length)];
@@ -142,7 +139,7 @@ function getNextWord() {
     return next;
 }
 
-// 出題表示
+// 出題
 function nextQuestion() {
 
     document.getElementById("nextBtn").style.display = "none";
@@ -157,6 +154,7 @@ function nextQuestion() {
 
     current = getNextWord();
 
+    // 未出題から削除
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
     recentWords.push(current);
@@ -205,6 +203,7 @@ function checkAnswer(choice) {
             addToQueue(current, interval);
         }
 
+        // 正解 → 自動
         setTimeout(nextQuestion, 800);
 
     } else {
@@ -216,51 +215,18 @@ function checkAnswer(choice) {
 
         addToQueue(current, 5);
 
+        // 不正解 → ボタン待ち
         document.getElementById("nextBtn").style.display = "inline-block";
     }
 
     sendLog(current.word + "," + (choice === current.meaning ? "○" : "×"));
 }
 
-// 終了（成績表示付き）
+// 終了
 function finishTest() {
-
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
-
-    let rank;
-    if (accuracy >= 90) rank = "S";
-    else if (accuracy >= 75) rank = "A";
-    else if (accuracy >= 60) rank = "B";
-    else rank = "C";
-
-    let color =
-        rank === "S" ? "blue" :
-        rank === "A" ? "green" :
-        rank === "B" ? "orange" : "red";
-
-    let last = localStorage.getItem("lastScore");
-    let diffText = "";
-
-    if (last !== null) {
-        let diff = accuracy - Number(last);
-        if (diff > 0) diffText = "⬆ +" + diff + "%";
-        else if (diff < 0) diffText = "⬇ " + diff + "%";
-        else diffText = "→ ±0%";
-    }
-
-    localStorage.setItem("lastScore", accuracy);
-
-    document.getElementById("summary").innerHTML =
-        "<span style='color:" + color + "'>" +
-        "📊 成績<br>" +
-        "正解数：" + correctCount + "<br>" +
-        "問題数：" + totalCount + "<br>" +
-        "正解率：" + accuracy + "%<br>" +
-        "評価：" + rank +
-        (diffText ? "<br>前回比：" + diffText : "") +
-        "</span>";
-
     sendLog("正解率," + accuracy + "%");
+    alert("終了");
 }
 </script>
 
