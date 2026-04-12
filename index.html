@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完成版）</title>
+<title>単語暗記ツール（範囲指定対応版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -10,9 +10,16 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
 .mode-btn { background: #eee; }
 .active { background: #4CAF50; color: white; }
+input { padding: 8px; margin: 5px; width: 100px; }
 </style>
 </head>
 <body>
+
+<h2>出題範囲</h2>
+<input type="number" id="startId" value="1"> ～ 
+<input type="number" id="endId" value="50">
+<br>
+<button onclick="applyRange()">範囲を適用</button>
 
 <h1 id="word">読み込み中...</h1>
 
@@ -28,6 +35,7 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 
 <script>
 let words = [];
+let filteredWords = [];
 let mistakes = [];
 let current = null;
 let mode = "normal";
@@ -38,7 +46,7 @@ let totalCount = 0;
 // GAS
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-// セッション名（日本時間）
+// セッション名
 let sessionId = getJSTString();
 
 function getJSTString() {
@@ -51,7 +59,6 @@ function getJSTString() {
         String(now.getSeconds()).padStart(2,"0");
 }
 
-// 時刻
 function formatTime(date) {
     return date.getFullYear() + "/" +
         String(date.getMonth()+1).padStart(2,"0") + "/" +
@@ -72,7 +79,7 @@ function sendLog(text) {
     });
 }
 
-// ★ CSV読み込み（番号付き）
+// CSV読み込み
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -87,18 +94,37 @@ fetch("words.csv")
         };
     }).filter(w => w.id && w.word && w.meaning);
 
-    // ID順
     words.sort((a, b) => a.id - b.id);
 
-    correctCount = 0;
-    totalCount = 0;
-    mistakes = [];
+    // 初期は全範囲
+    filteredWords = [...words];
 
     sendLog(formatTime(new Date()) + "（開始）");
     sendLog("INPUT：words.csv");
 
     nextQuestion();
 });
+
+// 範囲適用
+function applyRange() {
+    const start = Number(document.getElementById("startId").value);
+    const end = Number(document.getElementById("endId").value);
+
+    filteredWords = words.filter(w => w.id >= start && w.id <= end);
+
+    if (filteredWords.length < 4) {
+        alert("単語が少なすぎます（最低4つ必要）");
+        return;
+    }
+
+    correctCount = 0;
+    totalCount = 0;
+    mistakes = [];
+
+    sendLog("範囲指定," + start + "-" + end);
+
+    nextQuestion();
+}
 
 // モード
 function setMode(m) {
@@ -115,20 +141,17 @@ function setMode(m) {
     nextQuestion();
 }
 
-// ★ 出題ロジック（核心）
+// 出題ロジック
 function getNextWord(source) {
 
-    // ① 復習モードはミス優先
     if (mode === "review" && mistakes.length > 0) {
         return mistakes[Math.floor(Math.random() * mistakes.length)];
     }
 
-    // ② 通常モードでもミスを優先（確率高め）
     if (mistakes.length > 0 && Math.random() < 0.5) {
         return mistakes[Math.floor(Math.random() * mistakes.length)];
     }
 
-    // ③ 若い番号優先＋ランダム
     const max = Math.min(10, source.length);
     const subset = source.slice(0, max);
 
@@ -139,11 +162,11 @@ function getNextWord(source) {
 function nextQuestion() {
     document.getElementById("result").textContent = "";
 
-    let source = (mode === "review") ? mistakes : words;
+    let source = (mode === "review") ? mistakes : filteredWords;
 
     if (source.length < 4) {
         document.getElementById("word").textContent =
-            mode === "review" ? "復習データが足りません" : "単語が足りません";
+            "単語が足りません";
         document.getElementById("choices").innerHTML = "";
         return;
     }
@@ -153,7 +176,7 @@ function nextQuestion() {
 
     let choices = [current.meaning];
     while (choices.length < 4) {
-        let rand = words[Math.floor(Math.random() * words.length)].meaning;
+        let rand = filteredWords[Math.floor(Math.random() * filteredWords.length)].meaning;
         if (!choices.includes(rand)) choices.push(rand);
     }
 
