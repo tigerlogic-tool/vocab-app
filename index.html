@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（Anki方式）</title>
+<title>単語暗記ツール（最終完成版：Anki＋重複防止）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -35,8 +35,7 @@ let current = null;
 // Anki管理
 let reviewQueue = [];
 let correctMap = {};
-let intervalMap = {}; // ★ 間隔管理
-
+let intervalMap = {};
 let recentWords = [];
 
 let correctCount = 0;
@@ -75,7 +74,13 @@ function sendLog(text) {
     });
 }
 
-// CSV
+// ★ 重複防止キュー登録
+function addToQueue(wordObj, delay) {
+    reviewQueue = reviewQueue.filter(q => q.word.word !== wordObj.word);
+    reviewQueue.push({ word: wordObj, delay: delay });
+}
+
+// CSV読み込み
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -97,7 +102,7 @@ fetch("words.csv")
     nextQuestion();
 });
 
-// 範囲
+// 範囲指定
 function applyRange() {
     const start = Number(document.getElementById("startId").value);
     const end = Number(document.getElementById("endId").value);
@@ -116,7 +121,7 @@ function applyRange() {
     nextQuestion();
 }
 
-// 出題
+// 出題ロジック
 function getNextWord() {
 
     reviewQueue.forEach(q => q.delay--);
@@ -140,7 +145,7 @@ function getNextWord() {
     return next;
 }
 
-// 出題表示
+// 出題
 function nextQuestion() {
 
     if (filteredWords.length === 0) {
@@ -177,7 +182,7 @@ function nextQuestion() {
     });
 }
 
-// 判定（核心）
+// 判定
 function checkAnswer(choice) {
 
     const now = new Date();
@@ -192,16 +197,14 @@ function checkAnswer(choice) {
 
         correctMap[wordKey] = (correctMap[wordKey] || 0) + 1;
 
-        // ★ 間隔を倍にする
         let interval = intervalMap[wordKey] || 5;
         interval = interval * 2;
         intervalMap[wordKey] = interval;
 
-        // ★ 3回正解で卒業
         if (correctMap[wordKey] >= 3) {
             filteredWords = filteredWords.filter(w => w.word !== wordKey);
         } else {
-            reviewQueue.push({ word: current, delay: interval });
+            addToQueue(current, interval);
         }
 
     } else {
@@ -209,11 +212,10 @@ function checkAnswer(choice) {
         document.getElementById("result").textContent =
             "❌ 不正解（正解：" + current.meaning + "）";
 
-        // ★ リセットして5問後
         intervalMap[wordKey] = 5;
         correctMap[wordKey] = 0;
 
-        reviewQueue.push({ word: current, delay: 5 });
+        addToQueue(current, 5);
     }
 
     sendLog(formatTime(now) + "," + current.word + "," + (choice === current.meaning ? "○" : "×"));
