@@ -206,7 +206,12 @@ function checkAnswer(choice) {
 
     sendLog(current.word + "," + (choice === current.meaning ? "○" : "×"));
 
-    setTimeout(nextQuestion, 800);
+    if (choice === current.meaning) {
+        setTimeout(nextQuestion, 800);   // 正解：すぐ進む
+    } else {
+        setTimeout(nextQuestion, 2000);  // 不正解：ゆっくり
+    }
+    
 }
 
 // 終了
