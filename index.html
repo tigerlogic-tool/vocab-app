@@ -2,244 +2,217 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>英単語学習アプリ</title>
-
+<title>単語暗記ツール（最終完成版）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body {
-  font-family: sans-serif;
-  max-width: 700px;
-  margin: auto;
-  padding: 10px;
-}
-
-h2 { text-align: center; }
-
-#word {
-  font-size: 34px;
-  margin: 20px 0;
-  text-align: center;
-}
-
-input {
-  width: 100%;
-  font-size: 18px;
-  padding: 10px;
-}
-
-button {
-  width: 100%;
-  padding: 12px;
-  margin-top: 10px;
-  font-size: 16px;
-}
-
-#stats {
-  margin-top: 20px;
-  font-size: 14px;
-  background: #f5f5f5;
-  padding: 10px;
-  border-radius: 8px;
-  white-space: pre-line;
-}
+body { font-family: sans-serif; text-align: center; margin: 20px; }
+button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
+#result { font-size: 18px; margin-top: 10px; height: 24px; }
+.mode-btn { background: #eee; }
+.active { background: #4CAF50; color: white; }
 </style>
 </head>
-
 <body>
 
-<h2>英単語学習アプリ</h2>
+<h1 id="word">読み込み中...</h1>
 
-<div id="word">読み込み中...</div>
+<button class="mode-btn active" onclick="setMode('normal')" id="normalBtn">通常モード</button>
+<button class="mode-btn" onclick="setMode('review')" id="reviewBtn">復習モード</button>
+<button onclick="resetMistakes()">復習リセット</button>
 
-<input id="answer" placeholder="意味を入力">
-<button onclick="checkAnswer()">回答</button>
+<div id="choices"></div>
+<p id="result"></p>
 
-<div id="stats"></div>
+<br>
+<button onclick="finishTest()">テスト終了（ログ保存）</button>
 
 <script>
+let words = [];
+let mistakes = [];
+let current = null;
+let mode = "normal";
 
-// =====================
-// GAS URL
-// =====================
+let correctCount = 0;
+let totalCount = 0;
+
+// GAS
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxZmW9H5i0zp7EGbEaLlm44v7ZhW-AEHSlIFz8bxMpw29RjnSVl6eTwueYMMV2Ed83-ng/exec";
 
-// =====================
-// 状態
-// =====================
-let words = [];
-let current = null;
-let studyLogs = [];
+// セッション名（日本時間）
+let sessionId = getJSTString();
 
-let startTime = new Date();
+function getJSTString() {
+    const now = new Date();
+    return now.getFullYear() + "-" +
+        String(now.getMonth()+1).padStart(2,"0") + "-" +
+        String(now.getDate()).padStart(2,"0") + "_" +
+        String(now.getHours()).padStart(2,"0") + "-" +
+        String(now.getMinutes()).padStart(2,"0") + "-" +
+        String(now.getSeconds()).padStart(2,"0");
+}
 
-let stats = {
-  totalAnswered: 0,
-  correctAnswered: 0,
-  wrongAnswered: 0
-};
+// 時刻
+function formatTime(date) {
+    return date.getFullYear() + "/" +
+        String(date.getMonth()+1).padStart(2,"0") + "/" +
+        String(date.getDate()).padStart(2,"0") + " " +
+        String(date.getHours()).padStart(2,"0") + ":" +
+        String(date.getMinutes()).padStart(2,"0") + ":" +
+        String(date.getSeconds()).padStart(2,"0");
+}
 
-// =====================
-// CSV読み込み
-// =====================
+// ログ送信
+function sendLog(text) {
+    fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({
+            sheetName: sessionId,
+            line: text
+        })
+    });
+}
+
+// ★ CSV読み込み（番号付き）
 fetch("words.csv")
-.then(r => r.text())
+.then(res => res.text())
 .then(text => {
+    let lines = text.split(/\r?\n/);
 
-  words = text.trim().split("\n").map(line => {
-    const [word, meaning] = line.split(",");
-    return {
-      word: word.trim(),
-      meaning: meaning.trim(),
-      correctCount: 0,
-      failed: false,
-      cleared: false
-    };
-  });
+    words = lines.map(line => {
+        const [id, word, meaning] = line.split(",");
+        return {
+            id: Number(id),
+            word: word?.trim(),
+            meaning: meaning?.trim()
+        };
+    }).filter(w => w.id && w.word && w.meaning);
 
-  nextWord();
-  updateStats();
+    // ID順
+    words.sort((a, b) => a.id - b.id);
+
+    correctCount = 0;
+    totalCount = 0;
+    mistakes = [];
+
+    sendLog(formatTime(new Date()) + "（開始）");
+    sendLog("INPUT：words.csv");
+
+    nextQuestion();
 });
 
-// =====================
-// 次の単語
-// =====================
-function nextWord() {
-  const pool = words.filter(w => !w.cleared);
+// モード
+function setMode(m) {
+    mode = m;
+    document.getElementById("normalBtn").classList.remove("active");
+    document.getElementById("reviewBtn").classList.remove("active");
 
-  if (pool.length === 0) {
-    document.getElementById("word").innerText = "全単語クリア！";
-    return;
-  }
-
-  current = pool[Math.floor(Math.random() * pool.length)];
-  document.getElementById("word").innerText = current.word;
-}
-
-// =====================
-// 回答処理
-// =====================
-function checkAnswer() {
-
-  const input = document.getElementById("answer").value.trim();
-  if (!current) return;
-
-  stats.totalAnswered++;
-
-  if (input === current.meaning) {
-
-    stats.correctAnswered++;
-
-    if (current.failed) {
-      current.correctCount = 0;
+    if (m === "normal") {
+        document.getElementById("normalBtn").classList.add("active");
+    } else {
+        document.getElementById("reviewBtn").classList.add("active");
     }
 
-    current.correctCount++;
-    current.failed = false;
+    nextQuestion();
+}
 
-    studyLogs.push({
-      time: new Date().toLocaleString(),
-      word: current.word,
-      result: "○"
-    });
+// ★ 出題ロジック（核心）
+function getNextWord(source) {
 
-    // 5回正解で消去
-    if (current.correctCount >= 5) {
-      current.cleared = true;
+    // ① 復習モードはミス優先
+    if (mode === "review" && mistakes.length > 0) {
+        return mistakes[Math.floor(Math.random() * mistakes.length)];
     }
 
-  } else {
+    // ② 通常モードでもミスを優先（確率高め）
+    if (mistakes.length > 0 && Math.random() < 0.5) {
+        return mistakes[Math.floor(Math.random() * mistakes.length)];
+    }
 
-    stats.wrongAnswered++;
-    current.failed = true;
-    current.correctCount = 0;
+    // ③ 若い番号優先＋ランダム
+    const max = Math.min(10, source.length);
+    const subset = source.slice(0, max);
 
-    studyLogs.push({
-      time: new Date().toLocaleString(),
-      word: current.word,
-      result: "×"
+    return subset[Math.floor(Math.random() * subset.length)];
+}
+
+// 出題
+function nextQuestion() {
+    document.getElementById("result").textContent = "";
+
+    let source = (mode === "review") ? mistakes : words;
+
+    if (source.length < 4) {
+        document.getElementById("word").textContent =
+            mode === "review" ? "復習データが足りません" : "単語が足りません";
+        document.getElementById("choices").innerHTML = "";
+        return;
+    }
+
+    current = getNextWord(source);
+    document.getElementById("word").textContent = current.word;
+
+    let choices = [current.meaning];
+    while (choices.length < 4) {
+        let rand = words[Math.floor(Math.random() * words.length)].meaning;
+        if (!choices.includes(rand)) choices.push(rand);
+    }
+
+    choices.sort(() => Math.random() - 0.5);
+
+    const div = document.getElementById("choices");
+    div.innerHTML = "";
+
+    choices.forEach(choice => {
+        const btn = document.createElement("button");
+        btn.textContent = choice;
+        btn.onclick = () => checkAnswer(choice);
+        div.appendChild(btn);
     });
-  }
-
-  document.getElementById("answer").value = "";
-
-  updateStats();
-  nextWord();
 }
 
-// =====================
-// 統計表示
-// =====================
-function updateStats() {
+// 判定
+function checkAnswer(choice) {
+    const now = new Date();
+    totalCount++;
 
-  const total = words.length;
-  const cleared = words.filter(w => w.cleared).length;
-  const remaining = total - cleared;
+    let result;
 
-  const accuracy = stats.totalAnswered === 0
-    ? 0
-    : (stats.correctAnswered / stats.totalAnswered * 100).toFixed(1);
+    if (choice === current.meaning) {
+        result = "○";
+        correctCount++;
+        document.getElementById("result").textContent = "⭕ 正解！";
+    } else {
+        result = "×";
+        document.getElementById("result").textContent =
+            "❌ 不正解（正解：" + current.meaning + "）";
 
-  const rate = total === 0
-    ? 0
-    : (cleared / total * 100).toFixed(1);
+        if (!mistakes.some(w => w.word === current.word)) {
+            mistakes.push(current);
+        }
+    }
 
-  document.getElementById("stats").innerText =
-`開始日時：${startTime.toLocaleString()}
-実施単語数：${stats.totalAnswered}
-正解数：${stats.correctAnswered}
-不正解数：${stats.wrongAnswered}
-正解率：${accuracy}%
-完全消去数：${cleared}
-未習得数：${remaining}
-達成率：${rate}%`;
+    sendLog(formatTime(now) + "," + current.word + "," + result);
+
+    setTimeout(nextQuestion, 1000);
 }
 
-// =====================
-// GAS送信
-// =====================
-function sendToGAS() {
-
-  const total = words.length;
-  const cleared = words.filter(w => w.cleared).length;
-  const remaining = total - cleared;
-
-  const accuracy = stats.totalAnswered === 0
-    ? 0
-    : (stats.correctAnswered / stats.totalAnswered * 100).toFixed(1);
-
-  const rate = total === 0
-    ? 0
-    : (cleared / total * 100).toFixed(1);
-
-  const payload = {
-    startTime: startTime.toLocaleString(),
-    endTime: new Date().toLocaleString(),
-
-    totalAnswered: stats.totalAnswered,
-    correct: stats.correctAnswered,
-    wrong: stats.wrongAnswered,
-
-    sessionAccuracy: accuracy,
-    cleared: cleared,
-    remaining: remaining,
-    rate: rate,
-
-    logs: studyLogs
-  };
-
-  fetch(GAS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-    keepalive: true
-  });
+// リセット
+function resetMistakes() {
+    mistakes = [];
+    alert("復習データをリセットしました");
 }
 
-// =====================
-// 終了時自動送信
-// =====================
-window.addEventListener("beforeunload", sendToGAS);
+// 終了
+function finishTest() {
+    const end = new Date();
+    const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
+    sendLog("累計正解," + correctCount + ",累計問題数," + totalCount);
+    sendLog("正解率," + accuracy + "%");
+    sendLog(formatTime(end) + "（終了）");
+
+    alert("ログ保存しました");
+}
 </script>
 
 </body>
