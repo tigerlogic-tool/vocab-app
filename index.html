@@ -82,15 +82,13 @@ function formatTime(date) {
 // ★ no-cors対応ログ送信
 function sendLog(text) {
 
-    const payload = {
-        sheetName: sessionId,
-        line: text
-    };
+    const formData = new FormData();
+    formData.append("sheetName", sessionId);
+    formData.append("line", text);
 
     fetch(GAS_URL, {
         method: "POST",
-        mode: "no-cors",   // ★ 重要
-        body: JSON.stringify(payload)
+        body: formData
     });
 }
 
