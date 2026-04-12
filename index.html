@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（完全版）</title>
+<title>単語暗記ツール（最終完成版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -46,8 +46,12 @@ let intervalMap = {};
 let correctCount = 0;
 let totalCount = 0;
 
-// 苦手ランキング
+// ★ 苦手ランキング
 let missCount = {};
+let missOrder = {};
+let missSeq = 0;
+
+// localStorage復元
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) {
     missCount = JSON.parse(savedMiss);
@@ -57,31 +61,10 @@ if (savedMiss) {
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
 // セッションID
-let sessionId = getJSTString();
+let sessionId = new Date().getTime();
 
-function getJSTString() {
-    const now = new Date();
-    return now.getFullYear() + "-" +
-        String(now.getMonth()+1).padStart(2,"0") + "-" +
-        String(now.getDate()).padStart(2,"0") + "_" +
-        String(now.getHours()).padStart(2,"0") + "-" +
-        String(now.getMinutes()).padStart(2,"0") + "-" +
-        String(now.getSeconds()).padStart(2,"0");
-}
-
-// 時刻
-function formatTime(date) {
-    return date.getFullYear() + "/" +
-        String(date.getMonth()+1).padStart(2,"0") + "/" +
-        String(date.getDate()).padStart(2,"0") + " " +
-        String(date.getHours()).padStart(2,"0") + ":" +
-        String(date.getMinutes()).padStart(2,"0") + ":" +
-        String(date.getSeconds()).padStart(2,"0");
-}
-
-// ★ no-cors対応ログ送信
+// ログ送信（form方式）
 function sendLog(text) {
-
     const formData = new FormData();
     formData.append("sheetName", sessionId);
     formData.append("line", text);
@@ -92,13 +75,7 @@ function sendLog(text) {
     });
 }
 
-// キュー
-function addToQueue(wordObj, delay) {
-    reviewQueue = reviewQueue.filter(q => q.word.id !== wordObj.id);
-    reviewQueue.push({ word: wordObj, delay: delay });
-}
-
-// CSV
+// CSV読み込み
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -118,14 +95,13 @@ fetch("words.csv")
     filteredWords = [...words];
     unseenWords = [...words];
 
-    sendLog(formatTime(new Date()) + "（開始）");
-    sendLog("INPUT：words.csv");
-
+    sendLog("開始");
     nextQuestion();
 });
 
-// 範囲
+// 範囲適用
 function applyRange() {
+
     const start = Number(startId.value);
     const end = Number(endId.value);
 
@@ -139,12 +115,20 @@ function applyRange() {
     correctCount = 0;
     totalCount = 0;
 
+    // ★ リセット
+    missCount = {};
+    missOrder = {};
+    missSeq = 0;
+
+    summary.innerHTML = "";
+    result.textContent = "";
+
     sendLog("範囲指定," + start + "-" + end);
 
     nextQuestion();
 }
 
-// 出題
+// 出題ロジック
 function getNextWord() {
 
     if (unseenWords.length > 0) {
@@ -164,7 +148,7 @@ function getNextWord() {
     return filteredWords[Math.floor(Math.random() * filteredWords.length)];
 }
 
-// 出題表示
+// 出題
 function nextQuestion() {
 
     nextBtn.style.display = "none";
@@ -203,7 +187,6 @@ function nextQuestion() {
 // 判定
 function checkAnswer(choice) {
 
-    const now = new Date();
     totalCount++;
     let id = current.id;
 
@@ -224,7 +207,7 @@ function checkAnswer(choice) {
             filteredWords = filteredWords.filter(w => w.id !== id);
             unseenWords = unseenWords.filter(w => w.id !== id);
         } else {
-            addToQueue(current, interval);
+            reviewQueue.push({ word: current, delay: interval });
         }
 
         setTimeout(nextQuestion, 800);
@@ -233,17 +216,20 @@ function checkAnswer(choice) {
 
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
 
+        // ★ ミス記録
         missCount[id] = (missCount[id] || 0) + 1;
+        missSeq++;
+        missOrder[id] = missSeq;
 
         correctMap[id] = 0;
         intervalMap[id] = 5;
 
-        addToQueue(current, 5);
+        reviewQueue.push({ word: current, delay: 5 });
 
         nextBtn.style.display = "inline-block";
     }
 
-    sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
+    sendLog(current.word + "," + (isCorrect ? "○" : "×"));
 }
 
 // ランキング
@@ -253,11 +239,15 @@ function getMissRanking() {
         let wordObj = words.find(w => w.id == id);
         return {
             word: wordObj.word,
-            count: missCount[id]
+            count: missCount[id],
+            order: missOrder[id] || 0
         };
     });
 
-    arr.sort((a, b) => b.count - a.count);
+    arr.sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return b.order - a.order;
+    });
 
     return arr.slice(0, 5);
 }
@@ -265,32 +255,30 @@ function getMissRanking() {
 // 終了
 function finishTest() {
 
-    const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
     localStorage.setItem("missCount", JSON.stringify(missCount));
 
     let ranking = getMissRanking();
 
-    let rankingHTML = "<br><br>📚 苦手単語ランキング<br>";
+    let html = "📊 成績<br>" +
+        "正解数：" + correctCount + "<br>" +
+        "問題数：" + totalCount + "<br>" +
+        "正解率：" + accuracy + "%<br><br>";
+
+    html += "📚 苦手ランキング<br>";
 
     if (ranking.length === 0) {
-        rankingHTML += "ミスなし！素晴らしい！";
+        html += "ミスなし！";
     } else {
         ranking.forEach((r, i) => {
-            rankingHTML += (i+1) + "位：" + r.word + "（" + r.count + "回）<br>";
+            html += (i+1) + "位：" + r.word + "（" + r.count + "回）<br>";
         });
     }
 
-    summary.innerHTML =
-        "📊 成績<br>" +
-        "正解数：" + correctCount + "<br>" +
-        "問題数：" + totalCount + "<br>" +
-        "正解率：" + accuracy + "%" +
-        rankingHTML;
+    summary.innerHTML = html;
 
     sendLog("正解率," + accuracy + "%");
-    sendLog(formatTime(end) + "（終了）");
 }
 </script>
 
