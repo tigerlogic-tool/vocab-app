@@ -46,24 +46,41 @@ let intervalMap = {};
 let correctCount = 0;
 let totalCount = 0;
 
-// ★ 苦手ランキング
+// 苦手ランキング
 let missCount = {};
 let missOrder = {};
 let missSeq = 0;
 
 // localStorage復元
 let savedMiss = localStorage.getItem("missCount");
-if (savedMiss) {
-    missCount = JSON.parse(savedMiss);
-}
+if (savedMiss) missCount = JSON.parse(savedMiss);
 
 // GAS
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-// セッションID
-let sessionId = new Date().getTime();
+// セッションID（元形式）
+function getJSTString() {
+    const now = new Date();
+    return now.getFullYear() + "-" +
+        String(now.getMonth()+1).padStart(2,"0") + "-" +
+        String(now.getDate()).padStart(2,"0") + "_" +
+        String(now.getHours()).padStart(2,"0") + "-" +
+        String(now.getMinutes()).padStart(2,"0") + "-" +
+        String(now.getSeconds()).padStart(2,"0");
+}
+let sessionId = getJSTString();
 
-// ログ送信（form方式）
+// 時刻フォーマット
+function formatTime(date) {
+    return date.getFullYear() + "/" +
+        String(date.getMonth()+1).padStart(2,"0") + "/" +
+        String(date.getDate()).padStart(2,"0") + " " +
+        String(date.getHours()).padStart(2,"0") + ":" +
+        String(date.getMinutes()).padStart(2,"0") + ":" +
+        String(date.getSeconds()).padStart(2,"0");
+}
+
+// GAS送信（form）
 function sendLog(text) {
     const formData = new FormData();
     formData.append("sheetName", sessionId);
@@ -75,7 +92,7 @@ function sendLog(text) {
     });
 }
 
-// CSV読み込み
+// CSV
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
@@ -95,7 +112,10 @@ fetch("words.csv")
     filteredWords = [...words];
     unseenWords = [...words];
 
-    sendLog("開始");
+    // ★ ログ順序（重要）
+    sendLog("INPUT：words.csv");
+    sendLog(formatTime(new Date()) + "（開始）");
+
     nextQuestion();
 });
 
@@ -115,7 +135,7 @@ function applyRange() {
     correctCount = 0;
     totalCount = 0;
 
-    // ★ リセット
+    // リセット
     missCount = {};
     missOrder = {};
     missSeq = 0;
@@ -128,7 +148,7 @@ function applyRange() {
     nextQuestion();
 }
 
-// 出題ロジック
+// 出題
 function getNextWord() {
 
     if (unseenWords.length > 0) {
@@ -148,7 +168,7 @@ function getNextWord() {
     return filteredWords[Math.floor(Math.random() * filteredWords.length)];
 }
 
-// 出題
+// 表示
 function nextQuestion() {
 
     nextBtn.style.display = "none";
@@ -162,7 +182,6 @@ function nextQuestion() {
     result.textContent = "";
 
     current = getNextWord();
-
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
     word.textContent = current.word;
@@ -187,6 +206,7 @@ function nextQuestion() {
 // 判定
 function checkAnswer(choice) {
 
+    const now = new Date();
     totalCount++;
     let id = current.id;
 
@@ -216,7 +236,6 @@ function checkAnswer(choice) {
 
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
 
-        // ★ ミス記録
         missCount[id] = (missCount[id] || 0) + 1;
         missSeq++;
         missOrder[id] = missSeq;
@@ -229,7 +248,8 @@ function checkAnswer(choice) {
         nextBtn.style.display = "inline-block";
     }
 
-    sendLog(current.word + "," + (isCorrect ? "○" : "×"));
+    // ★ ログ形式完全一致
+    sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
 // ランキング
@@ -255,6 +275,7 @@ function getMissRanking() {
 // 終了
 function finishTest() {
 
+    const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
     localStorage.setItem("missCount", JSON.stringify(missCount));
@@ -278,6 +299,8 @@ function finishTest() {
 
     summary.innerHTML = html;
 
+    // ★ 終了ログ順序も完全一致
+    sendLog(formatTime(end) + "（終了）");
     sendLog("正解率," + accuracy + "%");
 }
 </script>
