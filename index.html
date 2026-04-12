@@ -42,15 +42,12 @@ let current = null;
 let reviewQueue = [];
 let correctMap = {};
 let intervalMap = {};
-let recentWords = [];
 
 let correctCount = 0;
 let totalCount = 0;
 
-// ★ 苦手ランキング用（保存対象）
+// 苦手ランキング
 let missCount = {};
-
-// ★ localStorageから復元
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) {
     missCount = JSON.parse(savedMiss);
@@ -82,15 +79,18 @@ function formatTime(date) {
         String(date.getSeconds()).padStart(2,"0");
 }
 
-// ログ送信
+// ★ no-cors対応ログ送信
 function sendLog(text) {
+
+    const payload = {
+        sheetName: sessionId,
+        line: text
+    };
+
     fetch(GAS_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            sheetName: sessionId,
-            line: text
-        })
+        mode: "no-cors",   // ★ 重要
+        body: JSON.stringify(payload)
     });
 }
 
@@ -137,7 +137,6 @@ function applyRange() {
     reviewQueue = [];
     correctMap = {};
     intervalMap = {};
-    recentWords = [];
 
     correctCount = 0;
     totalCount = 0;
@@ -236,7 +235,6 @@ function checkAnswer(choice) {
 
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
 
-        // ★ ミスカウント
         missCount[id] = (missCount[id] || 0) + 1;
 
         correctMap[id] = 0;
@@ -250,7 +248,7 @@ function checkAnswer(choice) {
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
-// ランキング生成
+// ランキング
 function getMissRanking() {
 
     let arr = Object.keys(missCount).map(id => {
@@ -272,7 +270,6 @@ function finishTest() {
     const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
-    // ★ 保存
     localStorage.setItem("missCount", JSON.stringify(missCount));
 
     let ranking = getMissRanking();
