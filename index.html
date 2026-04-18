@@ -2,8 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完成版）</title>
+<title>単語暗記ツール（完全版＋進捗機能）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
 <style>
 body { font-family: sans-serif; text-align: center; margin: 20px; }
 button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320px; }
@@ -11,8 +12,27 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 #summary { margin-top:20px; font-size:20px; font-weight:bold; }
 #nextBtn { background: #ff9800; color: white; display: none; }
 input { padding: 8px; margin: 5px; width: 100px; }
+
+/* ★追加：進捗UI */
+#progressArea { margin: 15px 0; }
+#progressText { font-size: 16px; margin-bottom: 5px; }
+#progressBarWrap {
+    width: 80%;
+    max-width: 320px;
+    height: 20px;
+    background: #eee;
+    margin: 0 auto;
+    border-radius: 10px;
+}
+#progressBar {
+    height: 100%;
+    width: 0%;
+    background: #4caf50;
+    border-radius: 10px;
+}
 </style>
 </head>
+
 <body>
 
 <h2>出題範囲</h2>
@@ -20,6 +40,14 @@ input { padding: 8px; margin: 5px; width: 100px; }
 <input type="number" id="endId" value="50">
 <br>
 <button onclick="applyRange()">範囲を適用</button>
+
+<!-- ★追加：進捗 -->
+<div id="progressArea">
+    <div id="progressText"></div>
+    <div id="progressBarWrap">
+        <div id="progressBar"></div>
+    </div>
+</div>
 
 <h1 id="word">読み込み中...</h1>
 
@@ -46,19 +74,22 @@ let intervalMap = {};
 let correctCount = 0;
 let totalCount = 0;
 
+// ★追加：進捗用
+let initialCount = 0;
+let startTime = null;
+
 // 苦手ランキング
 let missCount = {};
 let missOrder = {};
 let missSeq = 0;
 
-// localStorage復元
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
 // GAS
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-// セッションID（元形式）
+// セッションID
 function getJSTString() {
     const now = new Date();
     return now.getFullYear() + "-" +
@@ -70,7 +101,7 @@ function getJSTString() {
 }
 let sessionId = getJSTString();
 
-// 時刻フォーマット
+// 時刻
 function formatTime(date) {
     return date.getFullYear() + "/" +
         String(date.getMonth()+1).padStart(2,"0") + "/" +
@@ -80,7 +111,7 @@ function formatTime(date) {
         String(date.getSeconds()).padStart(2,"0");
 }
 
-// GAS送信（form）
+// GAS送信
 function sendLog(text) {
     const formData = new FormData();
     formData.append("sheetName", sessionId);
@@ -96,6 +127,7 @@ function sendLog(text) {
 fetch("words.csv")
 .then(res => res.text())
 .then(text => {
+
     let lines = text.split(/\r?\n/);
 
     words = lines.map(line => {
@@ -112,14 +144,39 @@ fetch("words.csv")
     filteredWords = [...words];
     unseenWords = [...words];
 
-    // ★ ログ順序（重要）
     sendLog("INPUT：words.csv");
     sendLog(formatTime(new Date()) + "（開始）");
 
-    nextQuestion();
+    applyRange(); // ←ここ変更（nextQuestionではなく）
 });
 
-// 範囲適用
+// ★追加：進捗更新
+function updateProgress() {
+
+    const remain = filteredWords.length;
+    const done = initialCount - remain;
+    const percent = initialCount === 0 ? 0 : Math.round((done / initialCount) * 100);
+
+    const now = new Date();
+    const elapsedSec = (now - startTime) / 1000;
+
+    let remainTime = "--";
+
+    if (done > 0) {
+        const per = elapsedSec / done;
+        const sec = per * remain;
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        remainTime = m + "分" + s + "秒";
+    }
+
+    progressText.innerHTML =
+        `進捗：${done}/${initialCount}（${percent}%）<br>残り：${remain}問 / 予想残り時間：${remainTime}`;
+
+    progressBar.style.width = percent + "%";
+}
+
+// 範囲
 function applyRange() {
 
     const start = Number(startId.value);
@@ -135,15 +192,19 @@ function applyRange() {
     correctCount = 0;
     totalCount = 0;
 
-    // リセット
     missCount = {};
     missOrder = {};
     missSeq = 0;
+
+    initialCount = filteredWords.length; // ★追加
+    startTime = new Date();              // ★追加
 
     summary.innerHTML = "";
     result.textContent = "";
 
     sendLog("範囲指定," + start + "-" + end);
+
+    updateProgress(); // ★追加
 
     nextQuestion();
 }
@@ -171,11 +232,17 @@ function getNextWord() {
 // 表示
 function nextQuestion() {
 
+    updateProgress(); // ★追加
+
     nextBtn.style.display = "none";
 
     if (filteredWords.length === 0) {
-        word.textContent = "🎉 全問卒業！";
+
+        word.textContent = "🎉 テスト完了！全問クリア！";
         choices.innerHTML = "";
+        progressBar.style.width = "100%";
+
+        finishTest();
         return;
     }
 
@@ -187,6 +254,7 @@ function nextQuestion() {
     word.textContent = current.word;
 
     let choicesArr = [current.meaning];
+
     while (choicesArr.length < 4) {
         let rand = filteredWords[Math.floor(Math.random() * filteredWords.length)].meaning;
         if (!choicesArr.includes(rand)) choicesArr.push(rand);
@@ -203,7 +271,7 @@ function nextQuestion() {
     });
 }
 
-// 判定
+// 判定（※ロジック完全維持）
 function checkAnswer(choice) {
 
     const now = new Date();
@@ -248,11 +316,10 @@ function checkAnswer(choice) {
         nextBtn.style.display = "inline-block";
     }
 
-    // ★ ログ形式完全一致
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
-// ランキング
+// ランキング（完全維持）
 function getMissRanking() {
 
     let arr = Object.keys(missCount).map(id => {
@@ -272,7 +339,7 @@ function getMissRanking() {
     return arr.slice(0, 5);
 }
 
-// 終了
+// 終了（完全維持）
 function finishTest() {
 
     const end = new Date();
@@ -299,7 +366,6 @@ function finishTest() {
 
     summary.innerHTML = html;
 
-    // ★ 終了ログ順序も完全一致
     sendLog(formatTime(end) + "（終了）");
     sendLog("正解率," + accuracy + "%");
 }
