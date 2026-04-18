@@ -1,9 +1,8 @@
-html id="final_complete_version"
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（完全版＋バグ修正＋進捗）</title>
+<title>単語暗記ツール（最終完全版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -12,14 +11,12 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
 #summary { margin-top:20px; font-size:20px; font-weight:bold; }
 #nextBtn { background: #ff9800; color: white; display: none; }
-input { padding: 8px; margin: 5px; width: 100px; }
+input { padding: 8px; margin: 5px; width: 80px; }
 
-/* 進捗 */
-#progressArea { margin: 15px 0; }
 #progressBarWrap {
     width: 80%; max-width: 320px;
     height: 20px; background: #eee;
-    margin: 0 auto; border-radius: 10px;
+    margin: 10px auto; border-radius: 10px;
 }
 #progressBar {
     height: 100%; width: 0%;
@@ -31,30 +28,45 @@ input { padding: 8px; margin: 5px; width: 100px; }
 
 <body>
 
-<h2>出題範囲</h2>
-<input type="number" id="startId" value="1"> ～ 
-<input type="number" id="endId" value="50">
+<h2>設定</h2>
+
+出題範囲：
+<input type="number" id="startId" value="1" min="1"> ～ 
+<input type="number" id="endId" min="1">
+
 <br>
-<button onclick="applyRange()">範囲を適用</button>
 
-<div id="progressArea">
-    <div id="progressText"></div>
-    <div id="progressBarWrap">
-        <div id="progressBar"></div>
-    </div>
-</div>
+選択肢数：
+<input type="number" id="choiceCount" value="4" min="2" max="10">
 
-<h1 id="word">読み込み中...</h1>
+<br>
+
+卒業回数：
+<input type="number" id="clearCount" value="3" min="1" max="3">
+
+<br>
+<button onclick="applyRange()">開始</button>
+
+<div id="progressText"></div>
+<div id="progressBarWrap"><div id="progressBar"></div></div>
+
+<h1 id="word">設定後に開始してください</h1>
 <div id="choices"></div>
 <p id="result"></p>
 
 <button id="nextBtn" onclick="nextQuestion()">次へ</button>
+
 <div id="summary"></div>
 
 <br>
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
 
 <script>
+// ===== 設定 =====
+let CHOICE_COUNT = 4;
+let CLEAR_COUNT = 3;
+let maxId = 0;
+
 // ===== データ =====
 let words = [];
 let rangeWords = [];
@@ -82,10 +94,10 @@ let missSeq = 0;
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
-// ===== GAS =====
+// ===== GAS（完全一致）=====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
-// ===== セッションID（復活）=====
+// ===== セッション =====
 function getJSTString() {
     const now = new Date();
     return now.getFullYear() + "-" +
@@ -107,16 +119,12 @@ function formatTime(date) {
         String(date.getSeconds()).padStart(2,"0");
 }
 
-// ===== GAS送信（完全復元）=====
+// ===== GAS送信 =====
 function sendLog(text) {
     const formData = new FormData();
     formData.append("sheetName", sessionId);
     formData.append("line", text);
-
-    fetch(GAS_URL, {
-        method: "POST",
-        body: formData
-    });
+    fetch(GAS_URL, { method: "POST", body: formData }).catch(()=>{});
 }
 
 // ===== CSV =====
@@ -137,39 +145,48 @@ fetch("words.csv")
 
     words.sort((a,b)=>a.id-b.id);
 
-    // ★ログ順序復元
+    maxId = words[words.length - 1].id;
+
+    startId.value = 1;
+    endId.value = maxId;
+    startId.max = maxId;
+    endId.max = maxId;
+
+    // ログ順序維持
     sendLog("INPUT：words.csv");
     sendLog(formatTime(new Date()) + "（開始）");
-
-    applyRange();
 });
 
-// ===== 進捗 =====
-function updateProgress() {
+// ===== バリデーション =====
+function validateInputs(start, end, choiceCount, clearCount) {
 
-    const remain = filteredWords.length;
-    const done = initialCount - remain;
-    const percent = initialCount ? Math.round(done / initialCount * 100) : 0;
+    if (isNaN(start) || isNaN(end)) return alert("範囲を正しく入力"), false;
+    if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
+    if (end < 1 || end > maxId) return alert("終了は1～" + maxId), false;
+    if (start > end) return alert("開始＞終了"), false;
 
-    let remainTime = "--";
-    if (done > 0) {
-        const elapsed = (new Date() - startTime)/1000;
-        const per = elapsed / done;
-        const sec = per * remain;
-        remainTime = Math.floor(sec/60)+"分"+Math.floor(sec%60)+"秒";
-    }
+    if (choiceCount < 2 || choiceCount > 10) return alert("選択肢は2～10"), false;
+    if (clearCount < 1 || clearCount > 3) return alert("卒業回数は1～3"), false;
 
-    progressText.innerHTML =
-        `進捗：${done}/${initialCount}（${percent}%）<br>残り：${remain}問 / 予想残り時間：${remainTime}`;
+    let count = words.filter(w => w.id >= start && w.id <= end).length;
+    if (count < choiceCount) return alert("単語数が選択肢数より少ない"), false;
 
-    progressBar.style.width = percent + "%";
+    return true;
 }
 
-// ===== 範囲 =====
+// ===== 開始 =====
 function applyRange() {
 
     const start = Number(startId.value);
     const end = Number(endId.value);
+
+    let c = Number(choiceCount.value);
+    let clr = Number(clearCount.value);
+
+    if (!validateInputs(start, end, c, clr)) return;
+
+    CHOICE_COUNT = Math.min(Math.max(c,2),10);
+    CLEAR_COUNT = Math.min(Math.max(clr,1),3);
 
     rangeWords = words.filter(w => w.id >= start && w.id <= end);
     filteredWords = [...rangeWords];
@@ -182,7 +199,6 @@ function applyRange() {
     correctCount = 0;
     totalCount = 0;
 
-    // ★苦手リセット復元
     missCount = {};
     missOrder = {};
     missSeq = 0;
@@ -199,18 +215,40 @@ function applyRange() {
     nextQuestion();
 }
 
-// ===== 選択肢（完全安全）=====
+// ===== 進捗 =====
+function updateProgress() {
+
+    if (initialCount === 0) return;
+
+    const remain = filteredWords.length;
+    const done = initialCount - remain;
+    const percent = Math.round(done / initialCount * 100);
+
+    let remainTime = "--";
+    if (done > 0) {
+        const elapsed = (new Date() - startTime)/1000;
+        const per = elapsed / done;
+        const sec = per * remain;
+        remainTime = Math.floor(sec/60)+"分"+Math.floor(sec%60)+"秒";
+    }
+
+    progressText.innerHTML =
+        `進捗：${done}/${initialCount}（${percent}%） 残り${remain}問 / ${remainTime}`;
+
+    progressBar.style.width = percent + "%";
+}
+
+// ===== 選択肢 =====
 function generateChoices() {
 
     let pool = rangeWords.map(w => w.meaning);
-    pool = [...new Set(pool)];
 
     let choices = [current.meaning];
 
     let others = pool.filter(m => m !== current.meaning)
                      .sort(()=>Math.random()-0.5);
 
-    choices = choices.concat(others.slice(0, 3));
+    choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
 
     return choices.sort(()=>Math.random()-0.5);
 }
@@ -242,9 +280,8 @@ function nextQuestion() {
     nextBtn.style.display = "none";
 
     if (filteredWords.length === 0) {
-        word.textContent = "🎉 テスト完了！全問クリア！";
+        word.textContent = "🎉 テスト完了！";
         choices.innerHTML = "";
-        progressBar.style.width = "100%";
         finishTest();
         return;
     }
@@ -287,7 +324,7 @@ function checkAnswer(choice) {
         interval *= 2;
         intervalMap[id] = interval;
 
-        if (correctMap[id] >= 3) {
+        if (correctMap[id] >= CLEAR_COUNT) {
             filteredWords = filteredWords.filter(w => w.id !== id);
             unseenWords = unseenWords.filter(w => w.id !== id);
         } else {
