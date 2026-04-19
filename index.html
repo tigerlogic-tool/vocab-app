@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完全版）</title>
+<title>単語暗記ツール（完全版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -11,7 +11,7 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
 #summary { margin-top:20px; font-size:20px; font-weight:bold; }
 #nextBtn { background: #ff9800; color: white; display: none; }
-input { padding: 8px; margin: 5px; width: 80px; }
+input, select { padding: 8px; margin: 5px; width: 120px; }
 
 #progressBarWrap {
     width: 80%; max-width: 320px;
@@ -27,6 +27,16 @@ input { padding: 8px; margin: 5px; width: 80px; }
 </head>
 
 <body>
+
+<h3>CSV選択</h3>
+<select id="csvSelector"></select>
+
+<h3>出題モード</h3>
+<select id="mode">
+<option value="1">単語 → 意味</option>
+<option value="2">意味 → 単語</option>
+<option value="3">混在（交互）</option>
+</select>
 
 <h2>設定</h2>
 
@@ -50,7 +60,7 @@ input { padding: 8px; margin: 5px; width: 80px; }
 <div id="progressText"></div>
 <div id="progressBarWrap"><div id="progressBar"></div></div>
 
-<h1 id="word">設定後に開始してください</h1>
+<h1 id="word">CSVを選択してください</h1>
 <div id="choices"></div>
 <p id="result"></p>
 
@@ -62,10 +72,18 @@ input { padding: 8px; margin: 5px; width: 80px; }
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
 
 <script>
+
+// ===== 追加：モード =====
+let MODE = 1;
+let lastMode = null;
+
 // ===== 設定 =====
 let CHOICE_COUNT = 4;
 let CLEAR_COUNT = 3;
 let maxId = 0;
+
+// ===== CSV =====
+let currentCsvName = "";
 
 // ===== データ =====
 let words = [];
@@ -94,7 +112,7 @@ let missSeq = 0;
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
-// ===== GAS（完全一致）=====
+// ===== GAS =====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
 // ===== セッション =====
@@ -127,55 +145,90 @@ function sendLog(text) {
     fetch(GAS_URL, { method: "POST", body: formData }).catch(()=>{});
 }
 
-// ===== CSV =====
-fetch("words.csv")
-.then(res => res.text())
-.then(text => {
+// ===== CSV一覧 =====
+fetch("csv-list.json")
+.then(res => res.json())
+.then(list => {
+    list.forEach(file => {
+        const opt = document.createElement("option");
+        opt.value = file;
+        opt.textContent = file;
+        csvSelector.appendChild(opt);
+    });
 
-    let lines = text.split(/\r?\n/);
+    currentCsvName = list[0];
+    loadCSV(currentCsvName);
 
-    words = lines.map(line => {
-        const [id, word, meaning] = line.split(",");
-        return {
-            id: Number(id),
-            word: word?.trim(),
-            meaning: meaning?.trim()
-        };
-    }).filter(w => w.id && w.word && w.meaning);
-
-    words.sort((a,b)=>a.id-b.id);
-
-    maxId = words[words.length - 1].id;
-
-    startId.value = 1;
-    endId.value = maxId;
-    startId.max = maxId;
-    endId.max = maxId;
-
-    // ログ順序維持
-    sendLog("INPUT：words.csv");
+    sendLog("INPUT：" + currentCsvName);
     sendLog(formatTime(new Date()) + "（開始）");
 });
 
+// ===== CSV切替 =====
+csvSelector.addEventListener("change", () => {
+    currentCsvName = csvSelector.value;
+    loadCSV(currentCsvName);
+    sendLog("INPUT切替：" + currentCsvName);
+});
+
+// ===== CSV読み込み =====
+function loadCSV(fileName) {
+
+    fetch(fileName)
+    .then(res => res.text())
+    .then(text => {
+
+        let lines = text.split(/\r?\n/);
+        lines.shift();
+
+        words = lines.map(line => {
+            let cols = line.includes("\t") ? line.split("\t") : line.split(",");
+            return {
+                id: Number(cols[0]),
+                word: cols[1]?.trim(),
+                meaning: cols[2]?.trim()
+            };
+        }).filter(w => w.id && w.word && w.meaning);
+
+        words.sort((a,b)=>a.id-b.id);
+
+        maxId = words.length > 0 ? words[words.length - 1].id : 0;
+
+        startId.value = 1;
+        endId.value = maxId;
+        startId.max = maxId;
+        endId.max = maxId;
+
+        word.textContent = "「開始」を押してください";
+    });
+}
+
+// ===== モード取得 =====
+function getMode() {
+    if (MODE === 3) {
+        lastMode = lastMode === 1 ? 2 : 1;
+        return lastMode || 1;
+    }
+    return MODE;
+}
+
 // ===== バリデーション =====
 function validateInputs(start, end, choiceCount, clearCount) {
-
     if (isNaN(start) || isNaN(end)) return alert("範囲を正しく入力"), false;
     if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
     if (end < 1 || end > maxId) return alert("終了は1～" + maxId), false;
     if (start > end) return alert("開始＞終了"), false;
-
     if (choiceCount < 2 || choiceCount > 10) return alert("選択肢は2～10"), false;
     if (clearCount < 1 || clearCount > 3) return alert("卒業回数は1～3"), false;
-
     let count = words.filter(w => w.id >= start && w.id <= end).length;
     if (count < choiceCount) return alert("単語数が選択肢数より少ない"), false;
-
     return true;
 }
 
 // ===== 開始 =====
 function applyRange() {
+
+    MODE = Number(document.getElementById("mode").value);
+    lastMode = null;
 
     const start = Number(startId.value);
     const end = Number(endId.value);
@@ -217,7 +270,6 @@ function applyRange() {
 
 // ===== 進捗 =====
 function updateProgress() {
-
     if (initialCount === 0) return;
 
     const remain = filteredWords.length;
@@ -239,13 +291,18 @@ function updateProgress() {
 }
 
 // ===== 選択肢 =====
-function generateChoices() {
+function generateChoices(qMode) {
+    let pool = (qMode === 1)
+        ? rangeWords.map(w => w.meaning)
+        : rangeWords.map(w => w.word);
 
-    let pool = rangeWords.map(w => w.meaning);
+    let correct = (qMode === 1)
+        ? current.meaning
+        : current.word;
 
-    let choices = [current.meaning];
+    let choices = [correct];
 
-    let others = pool.filter(m => m !== current.meaning)
+    let others = pool.filter(x => x !== correct)
                      .sort(()=>Math.random()-0.5);
 
     choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
@@ -291,62 +348,81 @@ function nextQuestion() {
     current = getNextWord();
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
-    word.textContent = current.word;
+    let qMode = getMode();
 
-    let choicesArr = generateChoices();
+    word.textContent = (qMode === 1) ? current.word : current.meaning;
+
+    let choicesArr = generateChoices(qMode);
 
     choices.innerHTML = "";
+
     choicesArr.forEach(c=>{
         const btn = document.createElement("button");
         btn.textContent = c;
-        btn.onclick = ()=>checkAnswer(c);
+        btn.onclick = ()=>checkAnswer(c, qMode);
         choices.appendChild(btn);
     });
 }
 
 // ===== 判定 =====
-function checkAnswer(choice) {
+function checkAnswer(choice, qMode) {
 
     const now = new Date();
     totalCount++;
     let id = current.id;
 
-    let isCorrect = (choice === current.meaning);
+    let correctAnswer = (qMode === 1)
+        ? current.meaning
+        : current.word;
+
+    let isCorrect = (choice === correctAnswer);
 
     if (isCorrect) {
 
         correctCount++;
         result.textContent = "⭕ 正解！";
 
-        correctMap[id] = (correctMap[id] || 0) + 1;
+	    correctMap[id] = correctMap[id] || {1:0, 2:0};
+	    correctMap[id][qMode]++;
 
         let interval = intervalMap[id] || 5;
         interval *= 2;
         intervalMap[id] = interval;
 
-        if (correctMap[id] >= CLEAR_COUNT) {
-            filteredWords = filteredWords.filter(w => w.id !== id);
-            unseenWords = unseenWords.filter(w => w.id !== id);
-        } else {
-            reviewQueue.push({ word: current, delay: interval });
-        }
+	    if (MODE === 3) {
+	        if (correctMap[id][1] >= CLEAR_COUNT && correctMap[id][2] >= CLEAR_COUNT) {
+	            filteredWords = filteredWords.filter(w => w.id !== id);
+	            unseenWords = unseenWords.filter(w => w.id !== id);
+	        } else {
+	            reviewQueue.push({ word: current, delay: interval });
+	        }
+	    } else {
+	        if (correctMap[id][qMode] >= CLEAR_COUNT) {
+	            filteredWords = filteredWords.filter(w => w.id !== id);
+	            unseenWords = unseenWords.filter(w => w.id !== id);
+	        } else {
+	            reviewQueue.push({ word: current, delay: interval });
+	        }
+	    }
 
         setTimeout(nextQuestion, 800);
 
     } else {
 
-        result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
+        result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
 
         missCount[id] = (missCount[id] || 0) + 1;
         missSeq++;
         missOrder[id] = missSeq;
 
-        correctMap[id] = 0;
+        correctMap[id] = {1:0, 2:0};  // ← ★ここに入れる（置き換え）
         intervalMap[id] = 5;
 
         reviewQueue.push({ word: current, delay: 5 });
 
         nextBtn.style.display = "inline-block";
+        
+        // setTimeout(nextQuestion, 800);
     }
 
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
@@ -354,15 +430,15 @@ function checkAnswer(choice) {
 
 // ===== ランキング =====
 function getMissRanking() {
-
     let arr = Object.keys(missCount).map(id => {
         let wordObj = words.find(w => w.id == id);
+        if (!wordObj) return null;
         return {
             word: wordObj.word,
             count: missCount[id],
             order: missOrder[id] || 0
         };
-    });
+    }).filter(x => x !== null); // ★ここに入れる
 
     arr.sort((a, b) => {
         if (b.count !== a.count) return b.count - a.count;
@@ -406,4 +482,3 @@ function finishTest() {
 
 </body>
 </html>
-
