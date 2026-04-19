@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（CSV選択対応 完全版）</title>
+<title>単語暗記ツール（完全版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -30,6 +30,13 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 <h3>CSV選択</h3>
 <select id="csvSelector"></select>
+
+<h3>出題モード</h3>
+<select id="mode">
+<option value="1">単語 → 意味</option>
+<option value="2">意味 → 単語</option>
+<option value="3">混在（交互）</option>
+</select>
 
 <h2>設定</h2>
 
@@ -65,6 +72,11 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
 
 <script>
+
+// ===== 追加：モード =====
+let mode = 1;
+let lastMode = null;
+
 // ===== 設定 =====
 let CHOICE_COUNT = 4;
 let CLEAR_COUNT = 3;
@@ -100,7 +112,7 @@ let missSeq = 0;
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
-// ===== GAS（変更なし）=====
+// ===== GAS =====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
 // ===== セッション =====
@@ -133,11 +145,10 @@ function sendLog(text) {
     fetch(GAS_URL, { method: "POST", body: formData }).catch(()=>{});
 }
 
-// ===== CSV一覧取得 =====
+// ===== CSV一覧 =====
 fetch("csv-list.json")
 .then(res => res.json())
 .then(list => {
-
     list.forEach(file => {
         const opt = document.createElement("option");
         opt.value = file;
@@ -191,9 +202,16 @@ function loadCSV(fileName) {
     });
 }
 
-// =====（以下、既存ロジック完全そのまま）=====
-/* ここから下は一切変更なし */
+// ===== モード取得 =====
+function getMode() {
+    if (mode === 3) {
+        lastMode = lastMode === 1 ? 2 : 1;
+        return lastMode || 1;
+    }
+    return mode;
+}
 
+// ===== バリデーション =====
 function validateInputs(start, end, choiceCount, clearCount) {
     if (isNaN(start) || isNaN(end)) return alert("範囲を正しく入力"), false;
     if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
@@ -206,11 +224,18 @@ function validateInputs(start, end, choiceCount, clearCount) {
     return true;
 }
 
+// ===== 開始 =====
 function applyRange() {
+
+    mode = Number(document.getElementById("mode").value);
+    lastMode = null;
+
     const start = Number(startId.value);
     const end = Number(endId.value);
+
     let c = Number(choiceCount.value);
     let clr = Number(clearCount.value);
+
     if (!validateInputs(start, end, c, clr)) return;
 
     CHOICE_COUNT = Math.min(Math.max(c,2),10);
@@ -243,8 +268,10 @@ function applyRange() {
     nextQuestion();
 }
 
+// ===== 進捗 =====
 function updateProgress() {
     if (initialCount === 0) return;
+
     const remain = filteredWords.length;
     const done = initialCount - remain;
     const percent = Math.round(done / initialCount * 100);
@@ -263,30 +290,29 @@ function updateProgress() {
     progressBar.style.width = percent + "%";
 }
 
-function generateChoices() {
-    let pool = rangeWords.map(w => w.meaning);
-    let choices = [current.meaning];
-    let others = pool.filter(m => m !== current.meaning)
+// ===== 選択肢 =====
+function generateChoices(qMode) {
+    let pool = (qMode === 1)
+        ? rangeWords.map(w => w.meaning)
+        : rangeWords.map(w => w.word);
+
+    let correct = (qMode === 1)
+        ? current.meaning
+        : current.word;
+
+    let choices = [correct];
+
+    let others = pool.filter(x => x !== correct)
                      .sort(()=>Math.random()-0.5);
+
     choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
+
     return choices.sort(()=>Math.random()-0.5);
 }
 
-function getNextWord() {
-    if (unseenWords.length > 0) {
-        return unseenWords[Math.floor(Math.random() * unseenWords.length)];
-    }
-    reviewQueue.forEach(q => q.delay--);
-    let ready = reviewQueue.filter(q => q.delay <= 0);
-    if (ready.length > 0) {
-        const item = ready[0];
-        reviewQueue = reviewQueue.filter(q => q.word.id !== item.word.id);
-        return item.word;
-    }
-    return filteredWords[Math.floor(Math.random() * filteredWords.length)];
-}
-
+// ===== 出題 =====
 function nextQuestion() {
+
     updateProgress();
     nextBtn.style.display = "none";
 
@@ -298,30 +324,44 @@ function nextQuestion() {
     }
 
     result.textContent = "";
+
     current = getNextWord();
     unseenWords = unseenWords.filter(w => w.id !== current.id);
-    word.textContent = current.word;
 
-    let choicesArr = generateChoices();
+    let qMode = getMode();
+
+    word.textContent = (qMode === 1) ? current.word : current.meaning;
+
+    let choicesArr = generateChoices(qMode);
+
     choices.innerHTML = "";
 
     choicesArr.forEach(c=>{
         const btn = document.createElement("button");
         btn.textContent = c;
-        btn.onclick = ()=>checkAnswer(c);
+        btn.onclick = ()=>checkAnswer(c, qMode);
         choices.appendChild(btn);
     });
 }
 
-function checkAnswer(choice) {
+// ===== 判定 =====
+function checkAnswer(choice, qMode) {
+
     const now = new Date();
     totalCount++;
     let id = current.id;
-    let isCorrect = (choice === current.meaning);
+
+    let correctAnswer = (qMode === 1)
+        ? current.meaning
+        : current.word;
+
+    let isCorrect = (choice === correctAnswer);
 
     if (isCorrect) {
+
         correctCount++;
         result.textContent = "⭕ 正解！";
+
         correctMap[id] = (correctMap[id] || 0) + 1;
 
         let interval = intervalMap[id] || 5;
@@ -338,7 +378,8 @@ function checkAnswer(choice) {
         setTimeout(nextQuestion, 800);
 
     } else {
-        result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
+
+        result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
 
         missCount[id] = (missCount[id] || 0) + 1;
         missSeq++;
@@ -348,12 +389,14 @@ function checkAnswer(choice) {
         intervalMap[id] = 5;
 
         reviewQueue.push({ word: current, delay: 5 });
+
         nextBtn.style.display = "inline-block";
     }
 
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
+// ===== ランキング =====
 function getMissRanking() {
     let arr = Object.keys(missCount).map(id => {
         let wordObj = words.find(w => w.id == id);
@@ -372,7 +415,9 @@ function getMissRanking() {
     return arr.slice(0, 5);
 }
 
+// ===== 終了 =====
 function finishTest() {
+
     const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
