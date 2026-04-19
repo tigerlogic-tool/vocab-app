@@ -390,22 +390,21 @@ function checkAnswer(choice, qMode) {
         intervalMap[id] = interval;
 
 		if (MODE === 3) {
-		    const totalCorrect = (correctMap[id][1] || 0) + (correctMap[id][2] || 0);
 
-			if (
-			  (correctMap[id][1] || 0) >= 1 &&
-			  (correctMap[id][2] || 0) >= 1 &&
-			  totalCorrect >= CLEAR_COUNT
-			) {
-			    filteredWords = filteredWords.filter(w => w.id !== id);
-			    unseenWords = unseenWords.filter(w => w.id !== id);
-			} else {
-			    reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
-			    reviewQueue.push({ word: current, delay: interval });
-			    reviewQueue = reviewQueue.slice(0, 100);
-			}
+		    const correctWordToMeaning = (correctMap[id][1] || 0) >= 1;
+		    const correctMeaningToWord = (correctMap[id][2] || 0) >= 1;
 
-	    } else {
+		    // 両方向1回ずつ正解したら卒業
+		    if (correctWordToMeaning && correctMeaningToWord) {
+		        filteredWords = filteredWords.filter(w => w.id !== id);
+		        unseenWords = unseenWords.filter(w => w.id !== id);
+		    } else {
+		        reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
+		        reviewQueue.push({ word: current, delay: interval });
+		        reviewQueue = reviewQueue.slice(0, 100);
+		    }
+
+		} else {
 
 	        if (correctMap[id][qMode] >= CLEAR_COUNT) {
 	            filteredWords = filteredWords.filter(w => w.id !== id);
@@ -429,7 +428,7 @@ function checkAnswer(choice, qMode) {
         missOrder[id] = missSeq;
 
 		correctMap[id] = correctMap[id] || {1:0, 2:0};
-		correctMap[id][qMode] = 0;
+		// correctMap[id][qMode] = 0;
         intervalMap[id] = 5;
 
         reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
