@@ -386,25 +386,38 @@ function checkAnswer(choice, qMode) {
 	    correctMap[id][qMode]++;
 
         let interval = intervalMap[id] || 5;
-        interval *= 2;
+        interval = Math.min(interval * 2, 60);
         intervalMap[id] = interval;
 
-	    if (MODE === 3) {
-	        if (correctMap[id][1] >= CLEAR_COUNT && correctMap[id][2] >= CLEAR_COUNT) {
-	            filteredWords = filteredWords.filter(w => w.id !== id);
-	            unseenWords = unseenWords.filter(w => w.id !== id);
-	        } else {
-	            reviewQueue.push({ word: current, delay: interval });
-	        }
+		if (MODE === 3) {
+		    const totalCorrect = (correctMap[id][1] || 0) + (correctMap[id][2] || 0);
+
+			if (
+			  (correctMap[id][1] || 0) >= 1 &&
+			  (correctMap[id][2] || 0) >= 1 &&
+			  totalCorrect >= CLEAR_COUNT
+			) {
+			    filteredWords = filteredWords.filter(w => w.id !== id);
+			    unseenWords = unseenWords.filter(w => w.id !== id);
+			} else {
+			    reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
+			    reviewQueue.push({ word: current, delay: interval });
+			    reviewQueue = reviewQueue.slice(0, 100);
+			}
+
 	    } else {
+
 	        if (correctMap[id][qMode] >= CLEAR_COUNT) {
 	            filteredWords = filteredWords.filter(w => w.id !== id);
 	            unseenWords = unseenWords.filter(w => w.id !== id);
 	        } else {
+	            reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
 	            reviewQueue.push({ word: current, delay: interval });
+	            reviewQueue = reviewQueue.slice(0, 100);
 	        }
 	    }
 
+		
         setTimeout(nextQuestion, 800);
 
     } else {
@@ -415,10 +428,13 @@ function checkAnswer(choice, qMode) {
         missSeq++;
         missOrder[id] = missSeq;
 
-        correctMap[id] = {1:0, 2:0};  // ← ★ここに入れる（置き換え）
+		correctMap[id] = correctMap[id] || {1:0, 2:0};
+		correctMap[id][qMode] = 0;
         intervalMap[id] = 5;
 
-        reviewQueue.push({ word: current, delay: 5 });
+        reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
+		reviewQueue.push({ word: current, delay: 5 });
+		reviewQueue = reviewQueue.slice(0, 100);
 
         nextBtn.style.display = "inline-block";
         
