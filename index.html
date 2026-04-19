@@ -29,6 +29,12 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <body>
 
 <h3>CSV選択</h3>
+<h3>出題パターン</h3>
+<select id="modeSelect">
+  <option value="1">単語 → 意味</option>
+  <option value="2">意味 → 単語</option>
+  <option value="3">混在（交互）</option>
+</select>
 <select id="csvSelector"></select>
 
 <h3>出題モード</h3>
@@ -74,8 +80,9 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <script>
 
 // ===== 追加：モード =====
-let mode = 1;
-let lastMode = null;
+let MODE = 1;
+let currentMode = 2;
+
 
 // ===== 設定 =====
 let CHOICE_COUNT = 4;
@@ -205,8 +212,8 @@ function loadCSV(fileName) {
 // ===== モード取得 =====
 function getMode() {
     if (mode === 3) {
-        lastMode = lastMode === 1 ? 2 : 1;
-        return lastMode || 1;
+        currentMode = currentMode === 1 ? 2 : 1;
+        return currentMode || 1;
     }
     return mode;
 }
@@ -227,8 +234,8 @@ function validateInputs(start, end, choiceCount, clearCount) {
 // ===== 開始 =====
 function applyRange() {
 
-    mode = Number(document.getElementById("mode").value);
-    lastMode = null;
+    MODE = Number(modeSelect.value);
+    currentMode = (MODE === 3) ? 2 : MODE;
 
     const start = Number(startId.value);
     const end = Number(endId.value);
@@ -291,26 +298,33 @@ function updateProgress() {
 }
 
 // ===== 選択肢 =====
-function generateChoices(qMode) {
-    let pool = (qMode === 1)
-        ? rangeWords.map(w => w.meaning)
-        : rangeWords.map(w => w.word);
+function generateChoices(mode) {
 
-    let correct = (qMode === 1)
-        ? current.meaning
-        : current.word;
+    if (mode === 1) {
+        let pool = rangeWords.map(w => w.meaning);
+        let choices = [current.meaning];
 
-    let choices = [correct];
+        let others = pool.filter(m => m !== current.meaning)
+                         .sort(()=>Math.random()-0.5);
 
-    let others = pool.filter(x => x !== correct)
-                     .sort(()=>Math.random()-0.5);
+        choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
+        return choices.sort(()=>Math.random()-0.5);
 
-    choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
+    } else {
+        let pool = rangeWords.map(w => w.word);
+        let choices = [current.word];
 
-    return choices.sort(()=>Math.random()-0.5);
+        let others = pool.filter(w => w !== current.word)
+                         .sort(()=>Math.random()-0.5);
+
+        choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
+        return choices.sort(()=>Math.random()-0.5);
+    }
 }
 
 // ===== 出題 =====
+
+
 function nextQuestion() {
 
     updateProgress();
@@ -328,68 +342,92 @@ function nextQuestion() {
     current = getNextWord();
     unseenWords = unseenWords.filter(w => w.id !== current.id);
 
-    let qMode = getMode();
+    // モード決定（ここだけに集約）
+    if (MODE === 3) {
+        currentMode = (currentMode === 1) ? 2 : 1;
+        currentMode = currentMode;
+    } else {
+        currentMode = MODE;
+    }
 
-    word.textContent = (qMode === 1) ? current.word : current.meaning;
+    // 表示
+    word.textContent = (currentMode === 1)
+        ? current.word
+        : current.meaning;
 
-    let choicesArr = generateChoices(qMode);
+    // 選択肢
+    let choicesArr = generateChoices(currentMode);
 
     choices.innerHTML = "";
-
-    choicesArr.forEach(c=>{
+    choicesArr.forEach(c => {
         const btn = document.createElement("button");
         btn.textContent = c;
-        btn.onclick = ()=>checkAnswer(c, qMode);
+        btn.onclick = () => checkAnswer(c);
         choices.appendChild(btn);
     });
 }
 
 // ===== 判定 =====
-function checkAnswer(choice, qMode) {
+function checkAnswer(choice) {
 
     const now = new Date();
     totalCount++;
+
     let id = current.id;
+    let isCorrect;
 
-    let correctAnswer = (qMode === 1)
-        ? current.meaning
-        : current.word;
-
-    let isCorrect = (choice === correctAnswer);
+    if (currentMode === 1) {
+        isCorrect = (choice === current.meaning);
+    } else {
+        isCorrect = (choice === current.word);
+    }
 
     if (isCorrect) {
 
         correctCount++;
         result.textContent = "⭕ 正解！";
 
-        correctMap[id] = (correctMap[id] || 0) + 1;
+        correctMap[id] = correctMap[id] || {1:0, 2:0};
+        correctMap[id][currentMode]++;
 
         let interval = intervalMap[id] || 5;
         interval *= 2;
         intervalMap[id] = interval;
 
-        if (correctMap[id] >= CLEAR_COUNT) {
-            filteredWords = filteredWords.filter(w => w.id !== id);
-            unseenWords = unseenWords.filter(w => w.id !== id);
+        if (MODE === 3) {
+            if (correctMap[id][1] >= CLEAR_COUNT && correctMap[id][2] >= CLEAR_COUNT) {
+                filteredWords = filteredWords.filter(w => w.id !== id);
+                unseenWords = unseenWords.filter(w => w.id !== id);
+            } else {
+                reviewQueue.push({ word: current, delay: interval });
+            }
         } else {
-            reviewQueue.push({ word: current, delay: interval });
+            if (correctMap[id][currentMode] >= CLEAR_COUNT) {
+                filteredWords = filteredWords.filter(w => w.id !== id);
+                unseenWords = unseenWords.filter(w => w.id !== id);
+            } else {
+                reviewQueue.push({ word: current, delay: interval });
+            }
         }
 
+        updateProgress(); // ← ★これが抜けてた
         setTimeout(nextQuestion, 800);
 
     } else {
 
-        result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
+        let correctText = (currentMode === 1) ? current.meaning : current.word;
+        result.textContent = "❌ 不正解（正解：" + correctText + "）";
 
         missCount[id] = (missCount[id] || 0) + 1;
         missSeq++;
         missOrder[id] = missSeq;
 
-        correctMap[id] = 0;
+        correctMap[id] = {1:0, 2:0};
         intervalMap[id] = 5;
 
         reviewQueue.push({ word: current, delay: 5 });
 
+        updateProgress(); // ← ★これも必要
         nextBtn.style.display = "inline-block";
     }
 
