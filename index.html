@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>単語暗記ツール（最終完全版）</title>
+<title>単語暗記ツール（CSV選択対応 完全版）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -11,7 +11,7 @@ button { margin: 6px; padding: 12px; font-size: 16px; width: 80%; max-width: 320
 #result { font-size: 18px; margin-top: 10px; height: 24px; }
 #summary { margin-top:20px; font-size:20px; font-weight:bold; }
 #nextBtn { background: #ff9800; color: white; display: none; }
-input { padding: 8px; margin: 5px; width: 80px; }
+input, select { padding: 8px; margin: 5px; width: 120px; }
 
 #progressBarWrap {
     width: 80%; max-width: 320px;
@@ -27,6 +27,9 @@ input { padding: 8px; margin: 5px; width: 80px; }
 </head>
 
 <body>
+
+<h3>CSV選択</h3>
+<select id="csvSelector"></select>
 
 <h2>設定</h2>
 
@@ -50,7 +53,7 @@ input { padding: 8px; margin: 5px; width: 80px; }
 <div id="progressText"></div>
 <div id="progressBarWrap"><div id="progressBar"></div></div>
 
-<h1 id="word">設定後に開始してください</h1>
+<h1 id="word">CSVを選択してください</h1>
 <div id="choices"></div>
 <p id="result"></p>
 
@@ -66,6 +69,9 @@ input { padding: 8px; margin: 5px; width: 80px; }
 let CHOICE_COUNT = 4;
 let CLEAR_COUNT = 3;
 let maxId = 0;
+
+// ===== CSV =====
+let currentCsvName = "";
 
 // ===== データ =====
 let words = [];
@@ -94,7 +100,7 @@ let missSeq = 0;
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
-// ===== GAS（完全一致）=====
+// ===== GAS（変更なし）=====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
 // ===== セッション =====
@@ -127,62 +133,84 @@ function sendLog(text) {
     fetch(GAS_URL, { method: "POST", body: formData }).catch(()=>{});
 }
 
-// ===== CSV =====
-fetch("words.csv")
-.then(res => res.text())
-.then(text => {
+// ===== CSV一覧取得 =====
+fetch("csv-list.json")
+.then(res => res.json())
+.then(list => {
 
-    let lines = text.split(/\r?\n/);
+    list.forEach(file => {
+        const opt = document.createElement("option");
+        opt.value = file;
+        opt.textContent = file;
+        csvSelector.appendChild(opt);
+    });
 
-    words = lines.map(line => {
-        const [id, word, meaning] = line.split(",");
-        return {
-            id: Number(id),
-            word: word?.trim(),
-            meaning: meaning?.trim()
-        };
-    }).filter(w => w.id && w.word && w.meaning);
+    currentCsvName = list[0];
+    loadCSV(currentCsvName);
 
-    words.sort((a,b)=>a.id-b.id);
-
-    maxId = words[words.length - 1].id;
-
-    startId.value = 1;
-    endId.value = maxId;
-    startId.max = maxId;
-    endId.max = maxId;
-
-    // ログ順序維持
-    sendLog("INPUT：words.csv");
+    sendLog("INPUT：" + currentCsvName);
     sendLog(formatTime(new Date()) + "（開始）");
 });
 
-// ===== バリデーション =====
-function validateInputs(start, end, choiceCount, clearCount) {
+// ===== CSV切替 =====
+csvSelector.addEventListener("change", () => {
+    currentCsvName = csvSelector.value;
+    loadCSV(currentCsvName);
+    sendLog("INPUT切替：" + currentCsvName);
+});
 
+// ===== CSV読み込み =====
+function loadCSV(fileName) {
+
+    fetch(fileName)
+    .then(res => res.text())
+    .then(text => {
+
+        let lines = text.split(/\r?\n/);
+        lines.shift();
+
+        words = lines.map(line => {
+            let cols = line.includes("\t") ? line.split("\t") : line.split(",");
+            return {
+                id: Number(cols[0]),
+                word: cols[1]?.trim(),
+                meaning: cols[2]?.trim()
+            };
+        }).filter(w => w.id && w.word && w.meaning);
+
+        words.sort((a,b)=>a.id-b.id);
+
+        maxId = words.length > 0 ? words[words.length - 1].id : 0;
+
+        startId.value = 1;
+        endId.value = maxId;
+        startId.max = maxId;
+        endId.max = maxId;
+
+        word.textContent = "「開始」を押してください";
+    });
+}
+
+// =====（以下、既存ロジック完全そのまま）=====
+/* ここから下は一切変更なし */
+
+function validateInputs(start, end, choiceCount, clearCount) {
     if (isNaN(start) || isNaN(end)) return alert("範囲を正しく入力"), false;
     if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
     if (end < 1 || end > maxId) return alert("終了は1～" + maxId), false;
     if (start > end) return alert("開始＞終了"), false;
-
     if (choiceCount < 2 || choiceCount > 10) return alert("選択肢は2～10"), false;
     if (clearCount < 1 || clearCount > 3) return alert("卒業回数は1～3"), false;
-
     let count = words.filter(w => w.id >= start && w.id <= end).length;
     if (count < choiceCount) return alert("単語数が選択肢数より少ない"), false;
-
     return true;
 }
 
-// ===== 開始 =====
 function applyRange() {
-
     const start = Number(startId.value);
     const end = Number(endId.value);
-
     let c = Number(choiceCount.value);
     let clr = Number(clearCount.value);
-
     if (!validateInputs(start, end, c, clr)) return;
 
     CHOICE_COUNT = Math.min(Math.max(c,2),10);
@@ -215,11 +243,8 @@ function applyRange() {
     nextQuestion();
 }
 
-// ===== 進捗 =====
 function updateProgress() {
-
     if (initialCount === 0) return;
-
     const remain = filteredWords.length;
     const done = initialCount - remain;
     const percent = Math.round(done / initialCount * 100);
@@ -238,44 +263,30 @@ function updateProgress() {
     progressBar.style.width = percent + "%";
 }
 
-// ===== 選択肢 =====
 function generateChoices() {
-
     let pool = rangeWords.map(w => w.meaning);
-
     let choices = [current.meaning];
-
     let others = pool.filter(m => m !== current.meaning)
                      .sort(()=>Math.random()-0.5);
-
     choices = choices.concat(others.slice(0, CHOICE_COUNT - 1));
-
     return choices.sort(()=>Math.random()-0.5);
 }
 
-// ===== 出題 =====
 function getNextWord() {
-
     if (unseenWords.length > 0) {
         return unseenWords[Math.floor(Math.random() * unseenWords.length)];
     }
-
     reviewQueue.forEach(q => q.delay--);
-
     let ready = reviewQueue.filter(q => q.delay <= 0);
-
     if (ready.length > 0) {
         const item = ready[0];
         reviewQueue = reviewQueue.filter(q => q.word.id !== item.word.id);
         return item.word;
     }
-
     return filteredWords[Math.floor(Math.random() * filteredWords.length)];
 }
 
-// ===== 表示 =====
 function nextQuestion() {
-
     updateProgress();
     nextBtn.style.display = "none";
 
@@ -287,15 +298,13 @@ function nextQuestion() {
     }
 
     result.textContent = "";
-
     current = getNextWord();
     unseenWords = unseenWords.filter(w => w.id !== current.id);
-
     word.textContent = current.word;
 
     let choicesArr = generateChoices();
-
     choices.innerHTML = "";
+
     choicesArr.forEach(c=>{
         const btn = document.createElement("button");
         btn.textContent = c;
@@ -304,20 +313,15 @@ function nextQuestion() {
     });
 }
 
-// ===== 判定 =====
 function checkAnswer(choice) {
-
     const now = new Date();
     totalCount++;
     let id = current.id;
-
     let isCorrect = (choice === current.meaning);
 
     if (isCorrect) {
-
         correctCount++;
         result.textContent = "⭕ 正解！";
-
         correctMap[id] = (correctMap[id] || 0) + 1;
 
         let interval = intervalMap[id] || 5;
@@ -334,7 +338,6 @@ function checkAnswer(choice) {
         setTimeout(nextQuestion, 800);
 
     } else {
-
         result.textContent = "❌ 不正解（正解：" + current.meaning + "）";
 
         missCount[id] = (missCount[id] || 0) + 1;
@@ -345,16 +348,13 @@ function checkAnswer(choice) {
         intervalMap[id] = 5;
 
         reviewQueue.push({ word: current, delay: 5 });
-
         nextBtn.style.display = "inline-block";
     }
 
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
 }
 
-// ===== ランキング =====
 function getMissRanking() {
-
     let arr = Object.keys(missCount).map(id => {
         let wordObj = words.find(w => w.id == id);
         return {
@@ -372,9 +372,7 @@ function getMissRanking() {
     return arr.slice(0, 5);
 }
 
-// ===== 終了 =====
 function finishTest() {
-
     const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
@@ -406,4 +404,3 @@ function finishTest() {
 
 </body>
 </html>
-
