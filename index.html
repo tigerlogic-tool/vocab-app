@@ -221,17 +221,23 @@ function loadCSV(fileName) {
         endId.max = maxId;
 
 		// ★ここから追加（プルダウン生成）
-		endSelect.innerHTML = "";
-
-		for (let i = 1; i <= maxId; i++) {
+		// ★10単位で作成
+		for (let i = 10; i <= maxId; i += 10) {
 		    const opt = document.createElement("option");
 		    opt.value = i;
 		    opt.textContent = i;
 		    endSelect.appendChild(opt);
 		}
 
+		// ★最大値が10刻みでない場合だけ最後に追加
+		if (maxId % 10 !== 0) {
+		    const opt = document.createElement("option");
+		    opt.value = maxId;
+		    opt.textContent = maxId;
+		    endSelect.appendChild(opt);
+		}
 		endSelect.value = maxId;
-		endId.value = maxId;
+		endId.value = maxId;		
 		// ★ここまで追加
 
         word.textContent = "「開始」を押してください";
