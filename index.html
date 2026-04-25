@@ -384,6 +384,16 @@ function nextQuestion() {
         result.textContent = "お疲れ様でした！";
         choices.innerHTML = "";
         unknownBtn.style.display = "none"; // ←追加
+        
+	    // ★ここ追加
+	    sendLog("=== 完全クリア時点の状態 ===");
+	    sendLog("問題数:" + totalCount);
+	    sendLog("正解数:" + correctCount);
+	    sendLog("正解率:" + (totalCount === 0 ? 0 : Math.round(correctCount / totalCount * 100)) + "%");
+	    sendLog("残り単語数:" + unseenWords.length);
+	    sendLog("復習残:" + wrongQueue.length);
+	    sendLog("ミス単語数:" + wrongWords.length);        
+        sendLog("完了時刻:" + formatTime(new Date()));
         finishTest();
         return;
     }
@@ -515,6 +525,15 @@ function finishTest() {
     const end = new Date();
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
+    // ★追加（ここ）
+    sendLog("=== 終了ボタン時点の状態 ===");
+    sendLog("問題数:" + totalCount);
+    sendLog("正解数:" + correctCount);
+    sendLog("正解率:" + accuracy + "%");
+    sendLog("残り:" + unseenWords.length);
+    sendLog("復習残:" + wrongQueue.length);
+    sendLog("ミス数:" + wrongWords.length);
+    
     localStorage.setItem("missCount", JSON.stringify(missCount));
 
     let ranking = getMissRanking();
