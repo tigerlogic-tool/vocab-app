@@ -368,6 +368,9 @@ function nextQuestion() {
     updateProgress();
     nextBtn.style.display = "none";
 
+    // ★追加：結果メッセージをクリア
+    result.textContent = "";
+    
     // ★④ モード取得（←これ必要）
 	let qMode = getMode();
 	currentQMode = qMode;
