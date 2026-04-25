@@ -475,6 +475,9 @@ function markUnknown() {
     answered = true;      // ←追加
     const now = new Date();
 
+    // ★追加：ボタン非表示
+    unknownBtn.style.display = "none";
+    
     totalCount++;
     handleWrong(currentQMode);
 
