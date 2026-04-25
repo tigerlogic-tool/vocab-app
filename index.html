@@ -221,7 +221,10 @@ function loadCSV(fileName) {
         endId.max = maxId;
 
 		// ★ここから追加（プルダウン生成）
-		// ★10単位で作成
+		// ★ endSelect 初期化（完全リセット）
+		endSelect.replaceChildren();
+
+		// ★ 10単位
 		for (let i = 10; i <= maxId; i += 10) {
 		    const opt = document.createElement("option");
 		    opt.value = i;
@@ -229,15 +232,17 @@ function loadCSV(fileName) {
 		    endSelect.appendChild(opt);
 		}
 
-		// ★最大値が10刻みでない場合だけ最後に追加
+		// ★ 端数対応
 		if (maxId % 10 !== 0) {
 		    const opt = document.createElement("option");
 		    opt.value = maxId;
 		    opt.textContent = maxId;
 		    endSelect.appendChild(opt);
 		}
-		endSelect.value = maxId;
-		endId.value = maxId;		
+
+		// ★ 値同期（重要）
+		endSelect.value = String(maxId);
+		endId.value = maxId;
 		// ★ここまで追加
 
         word.textContent = "「開始」を押してください";
