@@ -342,23 +342,19 @@ function getNextWord() {
         }
     }
 
-    // フェーズ2：間違い復習
-    if (phase === 2) {
+	// フェーズ2：間違い復習（修正版）
+	if (phase === 2) {
 
-        if (wrongQueue.length > 0) {
-            return wrongQueue.splice(Math.floor(Math.random()*wrongQueue.length),1)[0];
-        }
+	    // まだミスが残っている限りループ
+	    if (wrongWords.length > 0) {
 
-        // 復習終了
-        if (wrongWords.length === 0) {
-            return null; // 完全クリア
-        } else {
-            // もう一周
-            wrongQueue = [...wrongWords];
-            wrongWords = [];
-            return getNextWord();
-        }
-    }
+	        // まだ正解していないものから出す
+	        return wrongWords[Math.floor(Math.random() * wrongWords.length)];
+	    }
+
+	    // 全部正解したら終了
+	    return null;
+	}
 }
 
 // ===== 表示 =====
@@ -448,6 +444,9 @@ function checkAnswer(choice, qMode) {
 
         correctCount++;
         result.textContent = "⭕ 正解！";
+
+	    // ★追加：復習リストから削除
+	    wrongWords = wrongWords.filter(w => w.id !== current.id);
 
         setTimeout(nextQuestion, 800);
 
