@@ -456,6 +456,8 @@ function handleWrong(qMode) {
         : current.word;
 
     result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
+    // ★追加：分からないボタンを非表示
+	unknownBtn.style.display = "none";
 
     missCount[id] = (missCount[id] || 0) + 1;
     missSeq++;
