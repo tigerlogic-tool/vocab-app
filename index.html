@@ -50,11 +50,6 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <input type="number" id="choiceCount" value="4" min="2" max="10">
 
 <br>
-
-卒業回数：
-<input type="number" id="clearCount" value="3" min="1" max="3">
-
-<br>
 <button onclick="applyRange()">開始</button>
 
 <div id="progressText"></div>
@@ -73,13 +68,18 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 <script>
 
+
+// ===== テスト・復習切り替え：モード =====
+let phase = 1; // 1=通常, 2=間違い復習
+let wrongWords = []; // 間違えた単語リスト
+let wrongQueue = []; // 復習用
+
 // ===== 追加：モード =====
 let MODE = 1;
 let lastMode = null;
 
 // ===== 設定 =====
 let CHOICE_COUNT = 4;
-let CLEAR_COUNT = 3;
 let maxId = 0;
 
 // ===== CSV =====
@@ -88,15 +88,10 @@ let currentCsvName = "";
 // ===== データ =====
 let words = [];
 let rangeWords = [];
-let filteredWords = [];
 let unseenWords = [];
 let current = null;
 
 // ===== 学習 =====
-let reviewQueue = [];
-let correctMap = {};
-let intervalMap = {};
-
 let correctCount = 0;
 let totalCount = 0;
 
@@ -212,13 +207,12 @@ function getMode() {
 }
 
 // ===== バリデーション =====
-function validateInputs(start, end, choiceCount, clearCount) {
+function validateInputs(start, end, choiceCount) {
     if (isNaN(start) || isNaN(end)) return alert("範囲を正しく入力"), false;
     if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
     if (end < 1 || end > maxId) return alert("終了は1～" + maxId), false;
     if (start > end) return alert("開始＞終了"), false;
     if (choiceCount < 2 || choiceCount > 10) return alert("選択肢は2～10"), false;
-    if (clearCount < 1 || clearCount > 3) return alert("卒業回数は1～3"), false;
     let count = words.filter(w => w.id >= start && w.id <= end).length;
     if (count < choiceCount) return alert("単語数が選択肢数より少ない"), false;
     return true;
@@ -227,6 +221,10 @@ function validateInputs(start, end, choiceCount, clearCount) {
 // ===== 開始 =====
 function applyRange() {
 
+	phase = 1;
+	wrongWords = [];
+	wrongQueue = [];
+
     MODE = Number(document.getElementById("mode").value);
     lastMode = null;
 
@@ -234,30 +232,24 @@ function applyRange() {
     const end = Number(endId.value);
 
     let c = Number(choiceCount.value);
-    let clr = Number(clearCount.value);
 
-    if (!validateInputs(start, end, c, clr)) return;
+    if (!validateInputs(start, end, c)) return;
 
     CHOICE_COUNT = Math.min(Math.max(c,2),10);
-    CLEAR_COUNT = Math.min(Math.max(clr,1),3);
 
     rangeWords = words.filter(w => w.id >= start && w.id <= end);
-    filteredWords = [...rangeWords];
-    unseenWords = [...rangeWords];
+	unseenWords = [...rangeWords];
 
-    reviewQueue = [];
-    correctMap = {};
-    intervalMap = {};
-
-    correctCount = 0;
-    totalCount = 0;
+	// ★ここに追加
+	initialCount = rangeWords.length;
+	startTime = new Date();
+	
+	correctCount = 0;
+	totalCount = 0;
 
     missCount = {};
     missOrder = {};
     missSeq = 0;
-
-    initialCount = filteredWords.length;
-    startTime = new Date();
 
     summary.innerHTML = "";
     result.textContent = "";
@@ -272,8 +264,9 @@ function applyRange() {
 function updateProgress() {
     if (initialCount === 0) return;
 
-    const remain = filteredWords.length;
-    const done = initialCount - remain;
+	const remain = unseenWords.length + wrongQueue.length + wrongWords.length;
+	const done = initialCount - remain;
+	
     const percent = Math.round(done / initialCount * 100);
 
     let remainTime = "--";
@@ -284,8 +277,9 @@ function updateProgress() {
         remainTime = Math.floor(sec/60)+"分"+Math.floor(sec%60)+"秒";
     }
 
-    progressText.innerHTML =
-        `進捗：${done}/${initialCount}（${percent}%） 残り${remain}問 / ${remainTime}`;
+	progressText.innerHTML =
+	    `進捗：${done}/${initialCount}（${percent}%） 残り${remain}問 / ${remainTime} ` +
+	    (phase === 1 ? "【通常】" : "【復習】");
 
     progressBar.style.width = percent + "%";
 }
@@ -313,21 +307,46 @@ function generateChoices(qMode) {
 // ===== 出題 =====
 function getNextWord() {
 
-    if (unseenWords.length > 0) {
-        return unseenWords[Math.floor(Math.random() * unseenWords.length)];
+    // フェーズ1：通常
+    if (phase === 1) {
+
+        if (unseenWords.length > 0) {
+            return unseenWords[Math.floor(Math.random() * unseenWords.length)];
+        }
+
+        // 全問終了 → フェーズ2へ
+        if (unseenWords.length === 0) {
+            if (wrongWords.length === 0) {
+                return null; // 完全クリア
+            } else {
+                phase = 2;
+
+                sendLog(formatTime(new Date()) + " 復習フェーズ開始（" + wrongWords.length + "問）");
+
+                wrongQueue = [...wrongWords];
+                wrongWords = [];
+                return getNextWord();
+            }
+        }
     }
 
-    reviewQueue.forEach(q => q.delay--);
+    // フェーズ2：間違い復習
+    if (phase === 2) {
 
-    let ready = reviewQueue.filter(q => q.delay <= 0);
+        if (wrongQueue.length > 0) {
+            return wrongQueue.splice(Math.floor(Math.random()*wrongQueue.length),1)[0];
+        }
 
-    if (ready.length > 0) {
-        const item = ready[0];
-        reviewQueue = reviewQueue.filter(q => q.word.id !== item.word.id);
-        return item.word;
+        // 復習終了
+        if (wrongWords.length === 0) {
+            return null; // 完全クリア
+        } else {
+            // もう一周
+            wrongQueue = [...wrongWords];
+            wrongWords = [];
+            return getNextWord();
+        }
     }
-
-    return filteredWords[Math.floor(Math.random() * filteredWords.length)];
 }
 
 // ===== 表示 =====
@@ -336,34 +355,49 @@ function nextQuestion() {
     updateProgress();
     nextBtn.style.display = "none";
 
-    if (filteredWords.length === 0) {
-        word.textContent = "🎉 テスト完了！";
+    // ★① 次の問題
+    current = getNextWord();
+
+    // ★② 終了判定
+    if (!current) {
+        word.textContent = "🎉 完全クリア！";
+        result.textContent = "お疲れ様でした！";
         choices.innerHTML = "";
         finishTest();
         return;
     }
 
-    result.textContent = "";
+    // ★③ 通常処理
+    if (phase === 1) {
+        unseenWords = unseenWords.filter(w => w.id !== current.id);
+    }
 
-    current = getNextWord();
-    unseenWords = unseenWords.filter(w => w.id !== current.id);
-
+    // ★④ モード取得（←これ必要）
     let qMode = getMode();
 
-    word.textContent = (qMode === 1) ? current.word : current.meaning;
+    // ★⑤ 表示テキスト生成（←これ必要）
+    let displayText = (qMode === 1) ? current.word : current.meaning;
 
+    // ★⑥ 復習フェーズならラベル追加
+    if (phase === 2) {
+        displayText = "【復習】" + displayText;
+    }
+
+    // ★⑦ 表示
+    word.textContent = displayText;
+
+    // ★⑧ 選択肢生成
     let choicesArr = generateChoices(qMode);
 
     choices.innerHTML = "";
 
-    choicesArr.forEach(c=>{
+    choicesArr.forEach(c => {
         const btn = document.createElement("button");
         btn.textContent = c;
-        btn.onclick = ()=>checkAnswer(c, qMode);
+        btn.onclick = () => checkAnswer(c, qMode);
         choices.appendChild(btn);
     });
 }
-
 // ===== 判定 =====
 function checkAnswer(choice, qMode) {
 
@@ -377,48 +411,15 @@ function checkAnswer(choice, qMode) {
 
     let isCorrect = (choice === correctAnswer);
 
+    // 正解
     if (isCorrect) {
 
         correctCount++;
         result.textContent = "⭕ 正解！";
 
-	    correctMap[id] = correctMap[id] || {1:0, 2:0};
-	    correctMap[id][qMode]++;
-
-        let interval = intervalMap[id] || 5;
-        interval = Math.min(interval * 2, 60);
-        intervalMap[id] = interval;
-
-		if (MODE === 3) {
-
-		    const correctWordToMeaning = (correctMap[id][1] || 0) >= 1;
-		    const correctMeaningToWord = (correctMap[id][2] || 0) >= 1;
-
-		    // 両方向1回ずつ正解したら卒業
-		    if (correctWordToMeaning && correctMeaningToWord) {
-		        filteredWords = filteredWords.filter(w => w.id !== id);
-		        unseenWords = unseenWords.filter(w => w.id !== id);
-		    } else {
-		        reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
-		        reviewQueue.push({ word: current, delay: interval });
-		        reviewQueue = reviewQueue.slice(0, 100);
-		    }
-
-		} else {
-
-	        if (correctMap[id][qMode] >= CLEAR_COUNT) {
-	            filteredWords = filteredWords.filter(w => w.id !== id);
-	            unseenWords = unseenWords.filter(w => w.id !== id);
-	        } else {
-	            reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
-	            reviewQueue.push({ word: current, delay: interval });
-	            reviewQueue = reviewQueue.slice(0, 100);
-	        }
-	    }
-
-		
         setTimeout(nextQuestion, 800);
 
+    // 不正解
     } else {
 
         result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
@@ -427,17 +428,12 @@ function checkAnswer(choice, qMode) {
         missSeq++;
         missOrder[id] = missSeq;
 
-		correctMap[id] = correctMap[id] || {1:0, 2:0};
-		// correctMap[id][qMode] = 0;
-        intervalMap[id] = 5;
-
-        reviewQueue = reviewQueue.filter(q => q.word.id !== current.id);
-		reviewQueue.push({ word: current, delay: 5 });
-		reviewQueue = reviewQueue.slice(0, 100);
+        // ★ここが重要（フェーズ関係なし）
+        if (!wrongWords.find(w => w.id === current.id)) {
+            wrongWords.push(current);
+        }
 
         nextBtn.style.display = "inline-block";
-        
-        // setTimeout(nextQuestion, 800);
     }
 
     sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
