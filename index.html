@@ -59,7 +59,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <div id="choices"></div>
 <p id="result"></p>
 
-<button id="unknownBtn" style="background:#9e9e9e; color:white;">
+<button id="unknownBtn" onclick="markUnknown()" style="background:#9e9e9e; color:white;">
     🤔 分からない
 </button>
 <button id="nextBtn" onclick="nextQuestion()">次へ</button>
@@ -80,10 +80,12 @@ let wrongQueue = []; // 復習用
 // ===== 追加：モード =====
 let MODE = 1;
 let lastMode = null;
+let currentQMode = 1;
 
 // ===== 設定 =====
 let CHOICE_COUNT = 4;
 let maxId = 0;
+let answered = false;
 
 // ===== CSV =====
 let currentCsvName = "";
@@ -109,6 +111,13 @@ let missSeq = 0;
 
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
+
+const progressText = document.getElementById("progressText");
+const progressBar = document.getElementById("progressBar");
+
+const startId = document.getElementById("startId");
+const endId = document.getElementById("endId");
+const choiceCount = document.getElementById("choiceCount");
 
 // ===== GAS =====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
@@ -354,9 +363,14 @@ function getNextWord() {
 
 // ===== 表示 =====
 function nextQuestion() {
-
+	answered = false;
+	unknownBtn.style.display = "inline-block";
     updateProgress();
     nextBtn.style.display = "none";
+
+    // ★④ モード取得（←これ必要）
+	let qMode = getMode();
+	currentQMode = qMode;
 
     // ★① 次の問題
     current = getNextWord();
@@ -366,6 +380,7 @@ function nextQuestion() {
         word.textContent = "🎉 完全クリア！";
         result.textContent = "お疲れ様でした！";
         choices.innerHTML = "";
+        unknownBtn.style.display = "none"; // ←追加
         finishTest();
         return;
     }
@@ -374,9 +389,6 @@ function nextQuestion() {
     if (phase === 1) {
         unseenWords = unseenWords.filter(w => w.id !== current.id);
     }
-
-    // ★④ モード取得（←これ必要）
-    let qMode = getMode();
 
     // ★⑤ 表示テキスト生成（←これ必要）
     let displayText = (qMode === 1) ? current.word : current.meaning;
@@ -404,6 +416,9 @@ function nextQuestion() {
 // ===== 判定 =====
 function checkAnswer(choice, qMode) {
 
+    if (answered) return; // ←これ
+    answered = true;      // ←これ
+    
     const now = new Date();
     totalCount++;
     let id = current.id;
@@ -416,6 +431,7 @@ function checkAnswer(choice, qMode) {
 
     // 正解
     if (isCorrect) {
+    	unknownBtn.style.display = "none";
 
         correctCount++;
         result.textContent = "⭕ 正解！";
@@ -451,15 +467,18 @@ function handleWrong(qMode) {
 
     nextBtn.style.display = "inline-block";
 
-    sendLog(formatTime(now) + "," + current.word + ",×");
 }
 
 function markUnknown() {
-    totalCount++; // ←これ重要（問題数にカウント）
 
-    let qMode = getMode();
+    if (answered) return; // ←追加
+    answered = true;      // ←追加
+    const now = new Date();
 
-    handleWrong(qMode);
+    totalCount++;
+    handleWrong(currentQMode);
+
+    sendLog(formatTime(now) + "," + current.word + ",×（不明）");
 }
 
 // ===== ランキング =====
