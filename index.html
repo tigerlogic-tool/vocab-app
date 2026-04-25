@@ -42,7 +42,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 出題範囲：
 <input type="number" id="startId" value="1" min="1"> ～ 
-<select id="endSelect"></select>
+<input type="number" id="endId" min="1">
 
 <br>
 
@@ -112,27 +112,12 @@ let missSeq = 0;
 let savedMiss = localStorage.getItem("missCount");
 if (savedMiss) missCount = JSON.parse(savedMiss);
 
-window.addEventListener("DOMContentLoaded", () => {
-    endId.addEventListener("input", () => {
-        endSelect.value = endId.value;
-    });
-});
-
 const progressText = document.getElementById("progressText");
 const progressBar = document.getElementById("progressBar");
 
 const startId = document.getElementById("startId");
 const endId = document.getElementById("endId");
 const choiceCount = document.getElementById("choiceCount");
-
-const csvSelector = document.getElementById("csvSelector");
-const endSelect = document.getElementById("endSelect");
-const choices = document.getElementById("choices");
-const word = document.getElementById("word");
-const result = document.getElementById("result");
-const summary = document.getElementById("summary");
-const nextBtn = document.getElementById("nextBtn");
-const unknownBtn = document.getElementById("unknownBtn");
 
 // ===== GAS =====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
@@ -219,31 +204,6 @@ function loadCSV(fileName) {
         endId.value = maxId;
         startId.max = maxId;
         endId.max = maxId;
-
-		// ★ここから追加（プルダウン生成）
-		// ★ endSelect 初期化（完全リセット）
-		endSelect.replaceChildren();
-
-		// ★ 10単位
-		for (let i = 10; i <= maxId; i += 10) {
-		    const opt = document.createElement("option");
-		    opt.value = i;
-		    opt.textContent = i;
-		    endSelect.appendChild(opt);
-		}
-
-		// ★ 端数対応
-		if (maxId % 10 !== 0) {
-		    const opt = document.createElement("option");
-		    opt.value = maxId;
-		    opt.textContent = maxId;
-		    endSelect.appendChild(opt);
-		}
-
-		// ★ 値同期（重要）
-		endSelect.value = String(maxId);
-		endId.value = maxId;
-		// ★ここまで追加
 
         word.textContent = "「開始」を押してください";
     });
