@@ -134,8 +134,14 @@ loadVoices();
 const word = document.getElementById("word"); // ★これ無ければ追加
 
 word.addEventListener("click", () => {
-    if (current && current.word) {
+    if (!current) return;
+
+    if (currentQMode === 1) {
+        // 単語 → 意味
         speak(current.word);
+    } else {
+        // 意味 → 単語
+        speak(current.meaning);
     }
 });
 
