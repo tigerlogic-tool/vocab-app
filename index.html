@@ -71,11 +71,9 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 <script>
 
-
 // ===== テスト・復習切り替え：モード =====
 let phase = 1; // 1=通常, 2=間違い復習
 let wrongWords = []; // 間違えた単語リスト
-let wrongQueue = []; // 復習用
 
 // ===== 追加：モード =====
 let MODE = 1;
@@ -119,6 +117,36 @@ const startId = document.getElementById("startId");
 const endId = document.getElementById("endId");
 const choiceCount = document.getElementById("choiceCount");
 
+// ★ 音声リスト（iPhone対策）
+let voices = [];
+
+function loadVoices() {
+    voices = speechSynthesis.getVoices();
+}
+
+// iOSは非同期で読み込まれる
+speechSynthesis.onvoiceschanged = loadVoices;
+
+// 初回ロード
+loadVoices();
+
+
+const word = document.getElementById("word"); // ★これ無ければ追加
+
+word.addEventListener("click", () => {
+    if (current && current.word) {
+        speak(current.word);
+    }
+});
+
+document.addEventListener("click", () => {
+    // iPhone音声アンロック（確実版）
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+}, { once: true });
+
 // ===== GAS =====
 const GAS_URL = "https://script.google.com/macros/s/AKfycbyN6uzDSwGi71-yeY38Mm3HzwA7Y2DsnbDkcE27tiWskXZaO5P1vR7QbpkeqsWgzIuquQ/exec";
 
@@ -146,10 +174,13 @@ function formatTime(date) {
 
 // ===== GAS送信 =====
 function sendLog(text) {
-    const formData = new FormData();
-    formData.append("sheetName", sessionId);
-    formData.append("line", text);
-    fetch(GAS_URL, { method: "POST", body: formData }).catch(()=>{});
+    fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({
+            sheetName: sessionId,
+            line: text
+        })
+    }).catch(()=>{});
 }
 
 // ===== CSV一覧 =====
@@ -235,7 +266,6 @@ function applyRange() {
 
 	phase = 1;
 	wrongWords = [];
-	wrongQueue = [];
 
     MODE = Number(document.getElementById("mode").value);
     lastMode = null;
@@ -276,8 +306,8 @@ function applyRange() {
 function updateProgress() {
     if (initialCount === 0) return;
 
-	const remain = unseenWords.length + wrongQueue.length + wrongWords.length;
-	const done = initialCount - remain;
+	const remain = unseenWords.length + wrongWords.length + (current ? 1 : 0);
+	const done = initialCount - unseenWords.length;
 	
     const percent = Math.round(done / initialCount * 100);
 
@@ -335,8 +365,6 @@ function getNextWord() {
 
                 sendLog(formatTime(new Date()) + " 復習フェーズ開始（" + wrongWords.length + "問）");
 
-                wrongQueue = [...wrongWords];
-                wrongWords = [];
                 return getNextWord();
             }
         }
@@ -387,7 +415,6 @@ function nextQuestion() {
 	    sendLog("正解数:" + correctCount);
 	    sendLog("正解率:" + (totalCount === 0 ? 0 : Math.round(correctCount / totalCount * 100)) + "%");
 	    sendLog("残り単語数:" + unseenWords.length);
-	    sendLog("復習残:" + wrongQueue.length);
 	    sendLog("ミス単語数:" + wrongWords.length);        
         sendLog("完了時刻:" + formatTime(new Date()));
         finishTest();
@@ -475,9 +502,9 @@ function handleWrong(qMode) {
     missSeq++;
     missOrder[id] = missSeq;
 
-    if (!wrongWords.find(w => w.id === current.id)) {
-        wrongWords.push(current);
-    }
+	if (!wrongWords.find(w => w.id === current.id)) {
+	    wrongWords.push(current);
+	}
 
     nextBtn.style.display = "inline-block";
 
@@ -496,6 +523,48 @@ function markUnknown() {
     handleWrong(currentQMode);
 
     sendLog(formatTime(now) + "," + current.word + ",×（不明）");
+}
+
+function speak(text) {
+    if (!text) return;
+
+    // iPhone対策①：必ず一旦停止
+    speechSynthesis.cancel();
+
+    const utter = new SpeechSynthesisUtterance(text);
+
+	let v = null;
+
+    // iPhone対策②：voiceを明示（あれば）
+	if (voices.length > 0) {
+	    v = voices.find(v => v.lang.includes("en-US")) ||
+	        voices.find(v => v.lang.includes("en"));
+	}
+
+	// fallback
+	if (!v) {
+	    const tempVoices = speechSynthesis.getVoices();
+	    v = tempVoices.find(v => v.lang.includes("en"));
+	}
+
+	if (v) utter.voice = v;
+
+    utter.lang = "en-US";
+    utter.rate = 0.9;
+    utter.pitch = 1.0;
+
+    // iPhone対策③：少し遅延させる（超重要）fallback（iPhone対策）
+	setTimeout(() => {
+	    speechSynthesis.speak(utter);
+
+	    // ★保険リトライ（追加）
+	    setTimeout(() => {
+	        if (!speechSynthesis.speaking) {
+	            speechSynthesis.speak(utter);
+	        }
+	    }, 200);
+
+	}, 50);
 }
 
 // ===== ランキング =====
@@ -530,7 +599,6 @@ function finishTest() {
     sendLog("正解数:" + correctCount);
     sendLog("正解率:" + accuracy + "%");
     sendLog("残り:" + unseenWords.length);
-    sendLog("復習残:" + wrongQueue.length);
     sendLog("ミス数:" + wrongWords.length);
     
     localStorage.setItem("missCount", JSON.stringify(missCount));
