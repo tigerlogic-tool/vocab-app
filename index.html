@@ -538,6 +538,7 @@ function speak(text) {
     speechSynthesis.cancel();
 
     const utter = new SpeechSynthesisUtterance(text);
+    const isJapanese = /[ぁ-んァ-ン一-龯]/.test(text);
 
 	let v = null;
 
@@ -555,7 +556,7 @@ function speak(text) {
 
 	if (v) utter.voice = v;
 
-    utter.lang = "en-US";
+    utter.lang = isJapanese ? "ja-JP" : "en-US";
     utter.rate = 0.9;
     utter.pitch = 1.0;
 
