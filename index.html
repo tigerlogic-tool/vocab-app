@@ -68,6 +68,9 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 <br>
 <button onclick="finishTest()">テスト終了（ログ保存）</button>
+<button id="speechToggleBtn" onclick="toggleSpeech()">
+    🔊 音声ON
+</button>
 
 <script>
 
@@ -84,6 +87,18 @@ let currentQMode = 1;
 let CHOICE_COUNT = 4;
 let maxId = 0;
 let answered = false;
+let speechEnabled = localStorage.getItem("speechEnabled") === "true";
+
+// ▼ここに追加
+window.addEventListener("load", () => {
+    const btn = document.getElementById("speechToggleBtn");
+
+    if (speechEnabled) {
+        btn.textContent = "🔊 音声ON";
+    } else {
+        btn.textContent = "🔇 音声OFF";
+    }
+});
 
 // ===== CSV =====
 let currentCsvName = "";
@@ -383,6 +398,7 @@ function getNextWord() {
 	    if (wrongWords.length > 0) {
 
 	        // まだ正解していないものから出す
+	        //return wrongWords.shift();
 	        return wrongWords[Math.floor(Math.random() * wrongWords.length)];
 	    }
 
@@ -534,44 +550,43 @@ function markUnknown() {
 function speak(text) {
     if (!text) return;
 
-    // iPhone対策①：必ず一旦停止
+    // ★追加：OFFなら何もしない
+    if (!speechEnabled) return;
+
     speechSynthesis.cancel();
 
     const utter = new SpeechSynthesisUtterance(text);
     const isJapanese = /[ぁ-んァ-ン一-龯]/.test(text);
 
-	let v = null;
+    let v = null;
+    const list = voices.length > 0 ? voices : speechSynthesis.getVoices();
 
-    // iPhone対策②：voiceを明示（あれば）
-	if (voices.length > 0) {
-	    v = voices.find(v => v.lang.includes("en-US")) ||
-	        voices.find(v => v.lang.includes("en"));
-	}
+    if (isJapanese) {
+        // ★ 日本語voiceを選ぶ
+        v = list.find(v => v.lang === "ja-JP");
+        utter.lang = "ja-JP";
+    } else {
+        // ★ 英語voiceを選ぶ
+        v = list.find(v => v.lang === "en-US") ||
+            list.find(v => v.lang.startsWith("en"));
+        utter.lang = "en-US";
+    }
 
-	// fallback
-	if (!v) {
-	    const tempVoices = speechSynthesis.getVoices();
-	    v = tempVoices.find(v => v.lang.includes("en"));
-	}
+    if (v) utter.voice = v;
 
-	if (v) utter.voice = v;
-
-    utter.lang = isJapanese ? "ja-JP" : "en-US";
     utter.rate = 0.9;
     utter.pitch = 1.0;
 
-    // iPhone対策③：少し遅延させる（超重要）fallback（iPhone対策）
-	setTimeout(() => {
-	    speechSynthesis.speak(utter);
+    setTimeout(() => {
+        speechSynthesis.speak(utter);
 
-	    // ★保険リトライ（追加）
-	    setTimeout(() => {
-	        if (!speechSynthesis.speaking) {
-	            speechSynthesis.speak(utter);
-	        }
-	    }, 200);
+        setTimeout(() => {
+            if (!speechSynthesis.speaking) {
+                speechSynthesis.speak(utter);
+            }
+        }, 200);
 
-	}, 50);
+    }, 50);
 }
 
 // ===== ランキング =====
@@ -593,6 +608,22 @@ function getMissRanking() {
 
     return arr.slice(0, 5);
 }
+
+function toggleSpeech() {
+    speechEnabled = !speechEnabled;
+
+    localStorage.setItem("speechEnabled", speechEnabled);
+
+    const btn = document.getElementById("speechToggleBtn");
+
+    if (speechEnabled) {
+        btn.textContent = "🔊 音声ON";
+    } else {
+        btn.textContent = "🔇 音声OFF";
+        speechSynthesis.cancel();
+    }
+}
+
 
 // ===== 終了 =====
 function finishTest() {
