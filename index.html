@@ -301,10 +301,18 @@ function loadCSV(fileName) {
 
         maxId = words.length > 0 ? words[words.length - 1].id : 0;
 
-        // startId.value = 1;
-        endId.value = maxId;
-        startId.max = maxId;
-        // endId.max = maxId;
+		const saved = JSON.parse(localStorage.getItem("vocabSettings") || "{}");
+
+		const savedStart = Number(saved.startId);
+		const savedEnd = Number(saved.endId);
+
+		startId.value = (savedStart >= 1 && savedStart <= maxId)
+		    ? savedStart
+		    : 1;
+
+		endId.value = (savedEnd >= 1 && savedEnd <= maxId)
+		    ? savedEnd
+		    : maxId;
 
         word.textContent = "「開始」を押してください";
 
@@ -350,7 +358,7 @@ function validateInputs(start, end, choiceCount) {
 
 // ===== 開始 =====
 function applyRange() {
-
+	
 	phase = 1;
 	wrongWords = [];
 
@@ -364,6 +372,8 @@ function applyRange() {
 
     if (!validateInputs(start, end, c)) return;
 
+	saveSettings(); // ←これ追加（超重要）
+	
     CHOICE_COUNT = Math.min(Math.max(c,2),10);
 
     rangeWords = words.filter(w => w.id >= start && w.id <= end);
@@ -571,7 +581,7 @@ function nextQuestion() {
         unknownBtn.style.display = "none"; // ←追加
         
 	    // ★ここ追加
-	    sendLog("=== 完全クリア時点の状態 ===");
+	    sendLog("完全クリア時点の状態");
 	    sendLog("問題数:" + totalCount);
 	    sendLog("正解数:" + correctCount);
 	    sendLog("正解率:" + (totalCount === 0 ? 0 : Math.round(correctCount / totalCount * 100)) + "%");
