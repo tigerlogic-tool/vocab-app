@@ -232,6 +232,8 @@ function formatTime(date) {
 
 // ===== GAS送信 =====
 function sendLog(text) {
+    console.log("送信:", text);
+
     fetch(GAS_URL, {
         method: "POST",
         headers: {
@@ -241,7 +243,10 @@ function sendLog(text) {
             sheetName: sessionId,
             line: text
         })
-    }).catch(err => console.error(err));
+    })
+    .then(res => res.text())
+    .then(res => console.log("GAS応答:", res))
+    .catch(err => console.error("エラー:", err));
 }
 
 // ===== CSV一覧 =====
