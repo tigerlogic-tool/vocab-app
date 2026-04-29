@@ -232,21 +232,14 @@ function formatTime(date) {
 
 // ===== GAS送信 =====
 function sendLog(text) {
-    console.log("送信:", text);
-
     fetch(GAS_URL, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
+        mode: "no-cors",   // ★これ追加
         body: JSON.stringify({
             sheetName: sessionId,
             line: text
         })
-    })
-    .then(res => res.text())
-    .then(res => console.log("GAS応答:", res))
-    .catch(err => console.error("エラー:", err));
+    }).catch(()=>{});
 }
 
 // ===== CSV一覧 =====
