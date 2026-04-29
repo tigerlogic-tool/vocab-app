@@ -771,7 +771,7 @@ function finishTest() {
     const accuracy = totalCount === 0 ? 0 : Math.round((correctCount / totalCount) * 100);
 
     // ★追加（ここ）
-    sendLog("=== 終了ボタン時点の状態 ===");
+    sendLog("終了ボタン時点の状態");
     sendLog("問題数:" + totalCount);
     sendLog("正解数:" + correctCount);
     sendLog("正解率:" + accuracy + "%");
