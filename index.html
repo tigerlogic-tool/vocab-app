@@ -89,6 +89,9 @@ let maxId = 0;
 let answered = false;
 let speechEnabled = localStorage.getItem("speechEnabled") === "true";
 
+
+
+
 // ▼ここに追加
 window.addEventListener("load", () => {
     const btn = document.getElementById("speechToggleBtn");
@@ -97,6 +100,19 @@ window.addEventListener("load", () => {
         btn.textContent = "🔊 音声ON";
     } else {
         btn.textContent = "🔇 音声OFF";
+    }
+    
+
+    // 既存の音声ボタン処理の下に追加
+    const saved = localStorage.getItem("vocabSettings");
+
+    if (saved) {
+        const s = JSON.parse(saved);
+
+        if (s.mode) document.getElementById("mode").value = s.mode;
+        if (s.startId) startId.value = s.startId;
+        if (s.endId) endId.value = s.endId;
+        if (s.choiceCount) choiceCount.value = s.choiceCount;
     }
 });
 
@@ -131,6 +147,23 @@ const progressBar = document.getElementById("progressBar");
 const startId = document.getElementById("startId");
 const endId = document.getElementById("endId");
 const choiceCount = document.getElementById("choiceCount");
+const csvSelector = document.getElementById("csvSelector");
+
+const unknownBtn = document.getElementById("unknownBtn");
+const nextBtn = document.getElementById("nextBtn");
+const summary = document.getElementById("summary");
+const result = document.getElementById("result");
+const choices = document.getElementById("choices");
+
+//イベント登録
+csvSelector.addEventListener("change", saveSettings);
+document.getElementById("mode").addEventListener("change", saveSettings);
+startId.addEventListener("input", saveSettings);
+endId.addEventListener("input", saveSettings);
+choiceCount.addEventListener("input", saveSettings);
+
+
+
 
 // ★ 音声リスト（iPhone対策）
 let voices = [];
@@ -151,13 +184,17 @@ const word = document.getElementById("word"); // ★これ無ければ追加
 word.addEventListener("click", () => {
     if (!current) return;
 
+    let text;
+
     if (currentQMode === 1) {
-        // 単語 → 意味
-        speak(current.word);
+        // 単語 → 意味：英語を読む
+        text = current.word;
     } else {
-        // 意味 → 単語
-        speak(current.meaning);
+        // 意味 → 単語：日本語を読む
+        text = current.meaning;
     }
+
+    speak(text);
 });
 
 document.addEventListener("click", () => {
@@ -215,7 +252,18 @@ fetch("csv-list.json")
         csvSelector.appendChild(opt);
     });
 
-    currentCsvName = list[0];
+    // ★保存データ取得
+    const saved = localStorage.getItem("vocabSettings");
+
+    if (saved) {
+        const s = JSON.parse(saved);
+
+        currentCsvName = s.csv || list[0];
+        csvSelector.value = currentCsvName;
+    } else {
+        currentCsvName = list[0];
+    }
+
     loadCSV(currentCsvName);
 
     sendLog("INPUT：" + currentCsvName);
@@ -258,6 +306,23 @@ function loadCSV(fileName) {
         endId.max = maxId;
 
         word.textContent = "「開始」を押してください";
+
+        // =========================
+        // ★ここに追加（最重要）
+        // =========================
+        const resumed = loadProgress();
+
+        if (resumed) {
+            if (confirm("前回の続きから再開しますか？")) {
+                sendLog("途中再開");
+                nextQuestion();
+                return;
+            } else {
+                localStorage.removeItem("vocabProgress");
+            }
+        }
+        // =========================
+
     });
 }
 
@@ -322,6 +387,77 @@ function applyRange() {
     updateProgress();
     nextQuestion();
 }
+
+
+//保存処理（変更時に保存）
+function saveSettings() {
+    const settings = {
+        csv: csvSelector.value,
+        mode: document.getElementById("mode").value,
+        startId: startId.value,
+        endId: endId.value,
+        choiceCount: choiceCount.value
+    };
+
+    localStorage.setItem("vocabSettings", JSON.stringify(settings));
+}
+
+function saveProgress() {
+
+    if (!currentCsvName || rangeWords.length === 0) return;
+
+    const data = {
+        csv: currentCsvName,
+        startId: startId.value,
+        endId: endId.value,
+        mode: MODE,
+        choiceCount: CHOICE_COUNT,
+        phase: phase,
+        unseenIds: unseenWords.map(w => w.id),
+        wrongIds: wrongWords.map(w => w.id),
+        correctCount: correctCount,
+        totalCount: totalCount
+    };
+
+    localStorage.setItem("vocabProgress", JSON.stringify(data));
+}
+
+
+function loadProgress() {
+
+    const saved = localStorage.getItem("vocabProgress");
+    if (!saved) return false;
+
+    const data = JSON.parse(saved);
+
+    // CSV違うなら無視
+    if (data.csv !== currentCsvName) return false;
+
+    // 設定復元
+    startId.value = data.startId;
+    endId.value = data.endId;
+    MODE = Number(data.mode);
+    CHOICE_COUNT = Number(data.choiceCount);
+    phase = data.phase;
+
+    correctCount = data.correctCount;
+    totalCount = data.totalCount;
+
+    // 範囲再構築
+    rangeWords = words.filter(w => 
+        w.id >= data.startId && w.id <= data.endId
+    );
+
+    // ID→オブジェクト復元
+    unseenWords = rangeWords.filter(w => data.unseenIds.includes(w.id));
+    wrongWords = rangeWords.filter(w => data.wrongIds.includes(w.id));
+
+    initialCount = rangeWords.length;
+    startTime = new Date(); // ※ここは再計算でOK
+
+    return true;
+}
+
 
 // ===== 進捗 =====
 function updateProgress() {
@@ -413,6 +549,8 @@ function nextQuestion() {
 	unknownBtn.style.display = "inline-block";
     updateProgress();
     nextBtn.style.display = "none";
+
+    saveProgress(); // ←これ追加
 
     // ★追加：結果メッセージをクリア
     result.textContent = "";
@@ -640,6 +778,7 @@ function finishTest() {
     sendLog("ミス数:" + wrongWords.length);
     
     localStorage.setItem("missCount", JSON.stringify(missCount));
+    localStorage.removeItem("vocabProgress"); // ←これ追加
 
     let ranking = getMissRanking();
 
