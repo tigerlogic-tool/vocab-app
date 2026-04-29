@@ -234,11 +234,14 @@ function formatTime(date) {
 function sendLog(text) {
     fetch(GAS_URL, {
         method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
         body: JSON.stringify({
             sheetName: sessionId,
             line: text
         })
-    }).catch(()=>{});
+    }).catch(err => console.error(err));
 }
 
 // ===== CSV一覧 =====
