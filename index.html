@@ -753,26 +753,29 @@ function nextQuestion() {
     word.textContent = displayText;
 
 
-    // モード4：入力式・自己判定
-    if (qMode === 4) {
-        choices.innerHTML = "";
-        choiceMeanings.innerHTML = "";
+	// モード4：入力式・自己判定
+	if (qMode === 4) {
+	    // 問題には英単語だけを表示
+	    word.textContent = current.word;
 
-        unknownBtn.style.display = "none";
-        nextBtn.style.display = "inline-block";
-        nextBtn.textContent = "答えを見る";
+	    choices.innerHTML = "";
+	    choiceMeanings.innerHTML = "";
 
-        document.getElementById("selfAnswerArea").style.display = "block";
+	    unknownBtn.style.display = "none";
+	    nextBtn.style.display = "inline-block";
+	    nextBtn.textContent = "答えを見る";
 
-        const input = document.getElementById("selfAnswerInput");
-        input.value = "";
-        input.disabled = false;
+	    document.getElementById("selfAnswerArea").style.display = "block";
 
-        document.getElementById("selfAnswer").style.display = "none";
-        document.getElementById("selfAnswerText").textContent = "";
+	    const input = document.getElementById("selfAnswerInput");
+	    input.value = "";
+	    input.disabled = false;
 
-        return;
-    }
+	    document.getElementById("selfAnswer").style.display = "none";
+	    document.getElementById("selfAnswerText").textContent = "";
+
+	    return;
+	}
 
     // モード1～3では入力欄を隠す
     document.getElementById("selfAnswerArea").style.display = "none";
