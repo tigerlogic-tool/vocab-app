@@ -104,6 +104,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <option value="1">単語 → 意味</option>
 <option value="2">意味 → 単語</option>
 <option value="3">混在（交互）</option>
+<option value="4">自分で回答（選択肢なし）</option>
 </select>
 
 <h2>設定</h2>
@@ -115,7 +116,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 <br>
 
 選択肢数：
-<input type="number" id="choiceCount" value="4" min="2" max="10">
+<input type="number" id="choiceCount" value="4" min="4" max="10">
 
 <br>
 <button onclick="applyRange()">開始</button>
@@ -127,13 +128,42 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 
 <p id="result"></p>
 
+
+<div id="selfAnswerArea" style="display:none;">
+    <input
+        type="text"
+        id="selfAnswerInput"
+        placeholder="自分の答えを入力"
+        autocomplete="off"
+        style="width:80%; max-width:400px;"
+    >
+
+    <div id="selfAnswer" style="display:none;">
+        <h2>正解</h2>
+        <p id="selfAnswerText"></p>
+
+        <button
+            onclick="judgeSelfAnswer(true)"
+            style="background:#4caf50;color:white;">
+            あってた
+        </button>
+
+        <button
+            onclick="judgeSelfAnswer(false)"
+            style="background:#f44336;color:white;">
+            間違ってた
+        </button>
+    </div>
+</div>
+
+
 <div id="choices"></div>
 <div id="choiceMeanings"></div>
 
 <button id="unknownBtn" onclick="markUnknown()" style="background:#9e9e9e; color:white; display:none;">
     🤔 分からない
 </button>
-<button id="nextBtn" onclick="nextQuestion()">次へ</button>
+<button id="nextBtn" onclick="handleNextButton()">次へ</button>
 
 <div id="summary"></div>
 
@@ -676,14 +706,9 @@ function nextQuestion() {
     // ★追加：結果メッセージをクリア
     result.textContent = "";
     
-    
 	// 前の問題の意味一覧を消去
 	choiceMeanings.innerHTML = "";
 	currentChoiceWords = [];    
-    
-    
-    
-    
     
     // ★④ モード取得（←これ必要）
 	let qMode = getMode();
@@ -727,6 +752,31 @@ function nextQuestion() {
     // ★⑦ 表示
     word.textContent = displayText;
 
+
+    // モード4：入力式・自己判定
+    if (qMode === 4) {
+        choices.innerHTML = "";
+        choiceMeanings.innerHTML = "";
+
+        unknownBtn.style.display = "none";
+        nextBtn.style.display = "inline-block";
+        nextBtn.textContent = "答えを見る";
+
+        document.getElementById("selfAnswerArea").style.display = "block";
+
+        const input = document.getElementById("selfAnswerInput");
+        input.value = "";
+        input.disabled = false;
+
+        document.getElementById("selfAnswer").style.display = "none";
+        document.getElementById("selfAnswerText").textContent = "";
+
+        return;
+    }
+
+    // モード1～3では入力欄を隠す
+    document.getElementById("selfAnswerArea").style.display = "none";
+    nextBtn.textContent = "次へ";
 
 
     // ★⑧ 選択肢生成
@@ -978,6 +1028,80 @@ function finishTest() {
     sendLog(formatTime(end) + "（終了）");
     sendLog("正解率," + accuracy + "%");
 }
+
+
+function handleNextButton() {
+
+    // モード4：最初のクリックで答えを表示
+    if (currentQMode === 4 && !answered) {
+
+        const input = document.getElementById("selfAnswerInput");
+
+        // 入力欄を編集できない状態にする
+        input.disabled = true;
+
+        // 正解を表示
+        document.getElementById("selfAnswerText").textContent =
+            current.meaning;
+
+        document.getElementById("selfAnswer").style.display = "block";
+
+        // ボタンを判定待ちの状態にする
+        nextBtn.style.display = "none";
+
+        return;
+    }
+
+    // 判定後、またはモード1～3なら次の問題へ
+    nextQuestion();
+}
+
+
+function judgeSelfAnswer(isCorrect) {
+    if (answered) return;
+
+    // 答えを表示する前の判定は禁止
+    if (document.getElementById("selfAnswer").style.display === "none") {
+        return;
+    }
+
+    answered = true;
+
+    const now = new Date();
+    totalCount++;
+
+    if (isCorrect) {
+        correctCount++;
+
+        // 復習リストから削除
+        wrongWords = wrongWords.filter(
+            w => w.id !== current.id
+        );
+
+        result.textContent = "⭕ 正解！";
+    } else {
+        handleWrong(4);
+    }
+
+    // 判定ボタンを無効化
+    document.querySelectorAll(
+        "#selfAnswer button"
+    ).forEach(btn => {
+        btn.disabled = true;
+    });
+
+    // 次の問題へ進むボタンを表示
+    nextBtn.textContent = "次へ";
+    nextBtn.style.display = "inline-block";
+
+    sendLog(
+        formatTime(now) + "," +
+        current.word + "," +
+        (isCorrect ? "○" : "×")
+    );
+}
+
+
 </script>
 
 </body>
