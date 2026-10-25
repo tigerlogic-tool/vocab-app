@@ -1097,11 +1097,19 @@ function judgeSelfAnswer(isCorrect) {
     nextBtn.textContent = "次へ";
     nextBtn.style.display = "inline-block";
 
-    sendLog(
-        formatTime(now) + "," +
-        current.word + "," +
-        (isCorrect ? "○" : "×")
-    );
+    
+    
+	const userAnswer =
+	    document.getElementById("selfAnswerInput").value.trim();
+
+	sendLog(
+	    formatTime(now) + "," +
+	    current.word + "," +
+	    (isCorrect ? "○" : "×") + "," +
+	    userAnswer + "," +
+	    current.meaning
+	);    
+    
 }
 
 document.getElementById("selfCorrectBtn")
