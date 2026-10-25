@@ -51,6 +51,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 .choice-row {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     width: 100%;
     max-width: 600px;
@@ -60,6 +61,7 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 .choice-row button {
     flex: 0 0 42%;
     width: auto;
+    max-width: none;
     margin: 0;
 }
 
@@ -762,49 +764,47 @@ function nextQuestion() {
 // ===== 判定 =====
 function checkAnswer(choice, qMode, selectedWord) {
 
-    if (answered) return; // ←これ
-    answered = true;      // ←これ
-    
+    if (answered) return;
+    answered = true;
+
     const now = new Date();
     totalCount++;
-    let id = current.id;
-    
-    
-    
-    
-	// 回答後にすべての選択肢の英単語・意味を表示し、選択したものに○×を付ける
-	showChoiceMeanings(choice, isCorrect);
 
+    // 先に正誤判定する（重要）
+    let correctAnswer = (qMode === 1)
+        ? current.meaning
+        : current.word;
 
-	let correctAnswer = (qMode === 1)
-	    ? current.meaning
-	    : current.word;
+    let isCorrect = (choice === correctAnswer);
 
-	let isCorrect = (choice === correctAnswer);
-
-	// 正誤判定後に、すべての選択肢の意味と○×を表示
-	showChoiceMeanings(selectedWord, isCorrect);
+    // 回答後、全選択肢に英単語・意味と○×を表示
+    showChoiceMeanings(selectedWord, isCorrect);
 
     // 正解
     if (isCorrect) {
-    	unknownBtn.style.display = "none";
+        unknownBtn.style.display = "none";
 
         correctCount++;
         result.textContent = "⭕ 正解！";
 
-	    // ★追加：復習リストから削除
-	    wrongWords = wrongWords.filter(w => w.id !== current.id);
+        // 復習リストから削除
+        wrongWords = wrongWords.filter(w => w.id !== current.id);
 
+        // 3秒後に次の問題へ
         setTimeout(nextQuestion, 3000);
 
     // 不正解
     } else {
-
-	    handleWrong(qMode); // ←置き換え
+        handleWrong(qMode);
     }
 
-    sendLog(formatTime(now) + "," + current.word + "," + (isCorrect ? "○" : "×"));
+    sendLog(
+        formatTime(now) + "," +
+        current.word + "," +
+        (isCorrect ? "○" : "×")
+    );
 }
+
 
 function handleWrong(qMode) {
     const now = new Date();
