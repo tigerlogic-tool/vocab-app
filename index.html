@@ -1105,9 +1105,9 @@ function judgeSelfAnswer(isCorrect) {
 	sendLog(
 	    formatTime(now) + "," +
 	    current.word + "," +
-	    (isCorrect ? "○" : "×") + "," +
-	    userAnswer + "," +
-	    current.meaning
+	    (isCorrect ? "○" : "×") + ",自分の答え「" +
+	    userAnswer + "」, -----> 解答「" +
+	    current.meaning + "」"
 	);    
     
 }
