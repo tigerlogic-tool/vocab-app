@@ -138,22 +138,23 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
         style="width:80%; max-width:400px;"
     >
 
-    <div id="selfAnswer" style="display:none;">
-        <h2>正解</h2>
-        <p id="selfAnswerText"></p>
+	<div id="selfAnswer" style="display:none;">
+	    <h2>正解</h2>
+	    <p id="selfAnswerText"></p>
 
-        <button
-            onclick="judgeSelfAnswer(true)"
-            style="background:#4caf50;color:white;">
-            あってた
-        </button>
+	    <button type="button"
+	            onclick="judgeSelfAnswer(true)"
+	            style="background:#4caf50;color:white;">
+	        あってた
+	    </button>
 
-        <button
-            onclick="judgeSelfAnswer(false)"
-            style="background:#f44336;color:white;">
-            間違ってた
-        </button>
-    </div>
+	    <button type="button"
+	            onclick="judgeSelfAnswer(false)"
+	            style="background:#f44336;color:white;">
+	        間違ってた
+	    </button>
+	</div>
+
 </div>
 
 
