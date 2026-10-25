@@ -762,6 +762,8 @@ function nextQuestion() {
 
 }
 // ===== 判定 =====
+
+
 function checkAnswer(choice, qMode, selectedWord) {
 
     if (answered) return;
@@ -770,30 +772,28 @@ function checkAnswer(choice, qMode, selectedWord) {
     const now = new Date();
     totalCount++;
 
-    // 先に正誤判定する（重要）
     let correctAnswer = (qMode === 1)
         ? current.meaning
         : current.word;
 
+    // 先に正誤判定する
     let isCorrect = (choice === correctAnswer);
 
-    // 回答後、全選択肢に英単語・意味と○×を表示
+    // 正誤判定後に1回だけ呼び出す
     showChoiceMeanings(selectedWord, isCorrect);
 
-    // 正解
     if (isCorrect) {
         unknownBtn.style.display = "none";
 
         correctCount++;
         result.textContent = "⭕ 正解！";
 
-        // 復習リストから削除
-        wrongWords = wrongWords.filter(w => w.id !== current.id);
+        wrongWords = wrongWords.filter(
+            w => w.id !== current.id
+        );
 
-        // 3秒後に次の問題へ
         setTimeout(nextQuestion, 3000);
 
-    // 不正解
     } else {
         handleWrong(qMode);
     }
@@ -804,6 +804,8 @@ function checkAnswer(choice, qMode, selectedWord) {
         (isCorrect ? "○" : "×")
     );
 }
+
+
 
 
 function handleWrong(qMode) {
