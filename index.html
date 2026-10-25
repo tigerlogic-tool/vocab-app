@@ -1105,10 +1105,11 @@ function judgeSelfAnswer(isCorrect) {
 	sendLog(
 	    formatTime(now) + "," +
 	    current.word + "," +
-	    (isCorrect ? "○" : "×") + ",自分の答え「" +
-	    userAnswer + "」, -----> 解答「" +
-	    current.meaning + "」"
-	);    
+	    (isCorrect ? "○" : "×") + "," +
+	    "自分の回答：" +
+	    document.getElementById("selfAnswerInput").value.trim() + "," +
+	    "正解：" + current.meaning
+	); 
     
 }
 
