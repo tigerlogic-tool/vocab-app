@@ -187,8 +187,9 @@ const choiceMeanings = document.getElementById("choiceMeanings");
 // 現在の問題で実際に表示した選択肢を保持
 let currentChoiceWords = [];
 
-// 回答後に選択肢の英単語・意味・正誤を表示
-function showChoiceMeanings() {
+// 回答後に選択肢の英単語・意味を表示
+// 選択した選択肢に○×、不正解の場合は正解にも表示
+function showChoiceMeanings(selectedChoice, isCorrect) {
     choiceMeanings.innerHTML = "";
 
     currentChoiceWords.forEach(w => {
@@ -203,16 +204,34 @@ function showChoiceMeanings() {
         japanese.className = "choice-meaning-jp";
         japanese.textContent = w.meaning;
 
-        const mark = document.createElement("div");
-        const isCorrect = w.id === current.id;
-
-        mark.textContent = isCorrect ? "○ 正解" : "× 不正解";
-        mark.style.fontWeight = "bold";
-        mark.style.color = isCorrect ? "#2e7d32" : "#d32f2f";
-
         item.appendChild(english);
         item.appendChild(japanese);
-        item.appendChild(mark);
+
+        const choiceText = (currentQMode === 1)
+            ? w.meaning
+            : w.word;
+
+        // クリックした選択肢に○×を表示
+        if (choiceText === selectedChoice) {
+            const mark = document.createElement("div");
+            mark.textContent = isCorrect ? "○ 正解" : "× 不正解";
+            mark.style.fontWeight = "bold";
+            mark.style.color = isCorrect ? "#2e7d32" : "#d32f2f";
+            item.appendChild(mark);
+        }
+
+        // 不正解の場合、正解の選択肢に表示
+        const correctChoice = (currentQMode === 1)
+            ? current.meaning
+            : current.word;
+
+        if (!isCorrect && w.id === current.id) {
+            const answerMark = document.createElement("div");
+            answerMark.textContent = "👉 正解はこれ！";
+            answerMark.style.fontWeight = "bold";
+            answerMark.style.color = "#1565c0";
+            item.appendChild(answerMark);
+        }
 
         choiceMeanings.appendChild(item);
     });
@@ -711,9 +730,11 @@ function checkAnswer(choice, qMode) {
     totalCount++;
     let id = current.id;
     
-	// 回答後にすべての選択肢の英単語・意味を表示
-	showChoiceMeanings();
-
+    
+    
+    
+	// 回答後にすべての選択肢の英単語・意味を表示し、選択したものに○×を付ける
+	showChoiceMeanings(choice, isCorrect);
 
 
     let correctAnswer = (qMode === 1)
@@ -779,8 +800,6 @@ function markUnknown() {
     totalCount++;
     handleWrong(currentQMode);
     
-	// 「分からない」を選んだ場合も意味一覧を表示
-	showChoiceMeanings();    
 
     sendLog(formatTime(now) + "," + current.word + ",×（不明）");
 }
