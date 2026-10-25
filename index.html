@@ -48,6 +48,41 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
     margin-top: 4px;
     color: #555;
 }
+.choice-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 600px;
+    margin: 6px auto;
+}
+
+.choice-row button {
+    flex: 0 0 42%;
+    width: auto;
+    margin: 0;
+}
+
+.choice-detail {
+    flex: 1;
+    text-align: left;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.choice-mark {
+    flex-shrink: 0;
+    min-width: 100px;
+    text-align: left;
+    font-weight: bold;
+}
+
+@media (max-width: 400px) {
+    .choice-mark {
+        min-width: 85px;
+        font-size: 12px;
+    }
+}
 </style>
 </head>
 
@@ -187,34 +222,35 @@ const choiceMeanings = document.getElementById("choiceMeanings");
 // 現在の問題で実際に表示した選択肢を保持
 let currentChoiceWords = [];
 
-// 回答後に選択肢の英単語・意味を表示
-// 選択した選択肢に○×、不正解の場合は正解にも表示
-function showChoiceMeanings(selectedChoice, isCorrect) {
+// 回答後にすべての選択肢に英単語・意味を表示し、○×を付ける
+function showChoiceMeanings(selectedWord, isCorrect, isUnknown = false) {
     const rows = choices.querySelectorAll(".choice-row");
 
     rows.forEach((row, index) => {
         const w = currentChoiceWords[index];
-
-        const choiceText = (currentQMode === 1)
-            ? w.meaning
-            : w.word;
-
         const mark = row.querySelector(".choice-mark");
+        const detail = row.querySelector(".choice-detail");
+
+        // 回答後にすべての選択肢の英単語と意味を表示
+        detail.textContent = w.word + " — " + w.meaning;
+        detail.style.display = "block";
+
         mark.textContent = "";
 
         // 選択した選択肢
-        if (choiceText === selectedChoice) {
+        if (selectedWord && w.id === selectedWord.id) {
             if (isCorrect) {
-                mark.textContent = "○ 正解です";
+                mark.textContent = "○ 正解";
                 mark.style.color = "#2e7d32";
             } else {
                 mark.textContent = "× ちがいます";
                 mark.style.color = "#d32f2f";
             }
         }
-        // 不正解の場合、正解の選択肢にも○を表示
-        else if (!isCorrect && w.id === current.id) {
-            mark.textContent = "← 正解はこれ";
+
+        // 不正解または「分からない」の場合、正解の選択肢に○を表示
+        if ((!isCorrect || isUnknown) && w.id === current.id) {
+            mark.textContent = "○ 正解はこれ";
             mark.style.color = "#2e7d32";
         }
 
@@ -692,22 +728,39 @@ function nextQuestion() {
 	choices.innerHTML = "";
 
 	choicesArr.forEach(c => {
-	    const btn = document.createElement("button");
+	    const row = document.createElement("div");
+	    row.className = "choice-row";
 
-	    // モード1は日本語訳、モード2は英単語を選択肢にする
+	    const btn = document.createElement("button");
 	    const choiceText = (qMode === 1) ? c.meaning : c.word;
 
+	    // 出題モードに応じた選択肢
 	    btn.textContent = choiceText;
-	    btn.onclick = () => checkAnswer(choiceText, qMode);
+	    btn.onclick = () => checkAnswer(choiceText, qMode, c);
 
-	    choices.appendChild(btn);
+	    // 回答後に表示する英単語・意味
+	    const detail = document.createElement("div");
+	    detail.className = "choice-detail";
+	    detail.textContent = "";
+	    detail.style.display = "none";
+
+	    // ○×表示
+	    const mark = document.createElement("span");
+	    mark.className = "choice-mark";
+	    mark.textContent = "";
+
+	    row.appendChild(btn);
+	    row.appendChild(detail);
+	    row.appendChild(mark);
+
+	    choices.appendChild(row);
 	});
 
 
 
 }
 // ===== 判定 =====
-function checkAnswer(choice, qMode) {
+function checkAnswer(choice, qMode, selectedWord) {
 
     if (answered) return; // ←これ
     answered = true;      // ←これ
@@ -723,11 +776,14 @@ function checkAnswer(choice, qMode) {
 	showChoiceMeanings(choice, isCorrect);
 
 
-    let correctAnswer = (qMode === 1)
-        ? current.meaning
-        : current.word;
+	let correctAnswer = (qMode === 1)
+	    ? current.meaning
+	    : current.word;
 
-    let isCorrect = (choice === correctAnswer);
+	let isCorrect = (choice === correctAnswer);
+
+	// 正誤判定後に、すべての選択肢の意味と○×を表示
+	showChoiceMeanings(selectedWord, isCorrect);
 
     // 正解
     if (isCorrect) {
@@ -782,7 +838,9 @@ function markUnknown() {
 
     // ★追加：ボタン非表示
     unknownBtn.style.display = "none";
-    
+
+	showChoiceMeanings(null, false, true);    
+	
     totalCount++;
     handleWrong(currentQMode);
     
