@@ -790,21 +790,23 @@ function checkAnswer(choice, qMode, selectedWord) {
     // 正誤判定後に1回だけ呼び出す
     showChoiceMeanings(selectedWord, isCorrect);
 
-    if (isCorrect) {
-        unknownBtn.style.display = "none";
+	if (isCorrect) {
+	    unknownBtn.style.display = "none";
 
-        correctCount++;
-        result.textContent = "⭕ 正解！";
+	    correctCount++;
+	    result.textContent = "⭕ 正解！";
 
-        wrongWords = wrongWords.filter(
-            w => w.id !== current.id
-        );
+	    // 復習リストから削除
+	    wrongWords = wrongWords.filter(
+	        w => w.id !== current.id
+	    );
 
-        setTimeout(nextQuestion, 3000);
+	    // 次へボタンを表示（自動では進まない）
+	    nextBtn.style.display = "inline-block";
 
-    } else {
-        handleWrong(qMode);
-    }
+	} else {
+	    handleWrong(qMode);
+	}
 
     sendLog(
         formatTime(now) + "," +
@@ -824,7 +826,8 @@ function handleWrong(qMode) {
         ? current.meaning
         : current.word;
 
-    result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
+    // result.textContent = "❌ 不正解（正解：" + correctAnswer + "）";
+    result.textContent = "❌ 不正解";
     // ★追加：分からないボタンを非表示
 	unknownBtn.style.display = "none";
 
