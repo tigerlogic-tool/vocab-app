@@ -142,14 +142,12 @@ input, select { padding: 8px; margin: 5px; width: 120px; }
 	    <h2>正解</h2>
 	    <p id="selfAnswerText"></p>
 
-	    <button type="button"
-	            onclick="judgeSelfAnswer(true)"
+	    <button type="button" id="selfCorrectBtn"
 	            style="background:#4caf50;color:white;">
 	        あってた
 	    </button>
 
-	    <button type="button"
-	            onclick="judgeSelfAnswer(false)"
+	    <button type="button" id="selfWrongBtn"
 	            style="background:#f44336;color:white;">
 	        間違ってた
 	    </button>
@@ -775,6 +773,11 @@ function nextQuestion() {
 	    document.getElementById("selfAnswer").style.display = "none";
 	    document.getElementById("selfAnswerText").textContent = "";
 
+
+		// ★ここに追加
+		document.getElementById("selfCorrectBtn").disabled = false;
+		document.getElementById("selfWrongBtn").disabled = false;
+
 	    return;
 	}
 
@@ -1062,10 +1065,10 @@ function handleNextButton() {
 
 
 function judgeSelfAnswer(isCorrect) {
-    if (answered) return;
+    console.log("モード4判定:", isCorrect);
 
-    // 答えを表示する前の判定は禁止
-    if (document.getElementById("selfAnswer").style.display === "none") {
+    if (answered) {
+        console.log("判定済みのため終了");
         return;
     }
 
@@ -1077,7 +1080,6 @@ function judgeSelfAnswer(isCorrect) {
     if (isCorrect) {
         correctCount++;
 
-        // 復習リストから削除
         wrongWords = wrongWords.filter(
             w => w.id !== current.id
         );
@@ -1088,13 +1090,10 @@ function judgeSelfAnswer(isCorrect) {
     }
 
     // 判定ボタンを無効化
-    document.querySelectorAll(
-        "#selfAnswer button"
-    ).forEach(btn => {
-        btn.disabled = true;
-    });
+    document.getElementById("selfCorrectBtn").disabled = true;
+    document.getElementById("selfWrongBtn").disabled = true;
 
-    // 次の問題へ進むボタンを表示
+    // 次へ進むボタンを表示
     nextBtn.textContent = "次へ";
     nextBtn.style.display = "inline-block";
 
@@ -1105,6 +1104,15 @@ function judgeSelfAnswer(isCorrect) {
     );
 }
 
+document.getElementById("selfCorrectBtn")
+    .addEventListener("click", function () {
+        judgeSelfAnswer(true);
+    });
+
+document.getElementById("selfWrongBtn")
+    .addEventListener("click", function () {
+        judgeSelfAnswer(false);
+    });
 
 </script>
 
