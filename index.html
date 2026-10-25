@@ -190,50 +190,36 @@ let currentChoiceWords = [];
 // 回答後に選択肢の英単語・意味を表示
 // 選択した選択肢に○×、不正解の場合は正解にも表示
 function showChoiceMeanings(selectedChoice, isCorrect) {
-    choiceMeanings.innerHTML = "";
+    const rows = choices.querySelectorAll(".choice-row");
 
-    currentChoiceWords.forEach(w => {
-        const item = document.createElement("div");
-        item.className = "choice-meaning-item";
-
-        const english = document.createElement("div");
-        english.className = "choice-meaning-word";
-        english.textContent = w.word;
-
-        const japanese = document.createElement("div");
-        japanese.className = "choice-meaning-jp";
-        japanese.textContent = w.meaning;
-
-        item.appendChild(english);
-        item.appendChild(japanese);
+    rows.forEach((row, index) => {
+        const w = currentChoiceWords[index];
 
         const choiceText = (currentQMode === 1)
             ? w.meaning
             : w.word;
 
-        // クリックした選択肢に○×を表示
+        const mark = row.querySelector(".choice-mark");
+        mark.textContent = "";
+
+        // 選択した選択肢
         if (choiceText === selectedChoice) {
-            const mark = document.createElement("div");
-            mark.textContent = isCorrect ? "○ 正解" : "× 不正解";
-            mark.style.fontWeight = "bold";
-            mark.style.color = isCorrect ? "#2e7d32" : "#d32f2f";
-            item.appendChild(mark);
+            if (isCorrect) {
+                mark.textContent = "○ 正解です";
+                mark.style.color = "#2e7d32";
+            } else {
+                mark.textContent = "× ちがいます";
+                mark.style.color = "#d32f2f";
+            }
+        }
+        // 不正解の場合、正解の選択肢にも○を表示
+        else if (!isCorrect && w.id === current.id) {
+            mark.textContent = "← 正解はこれ";
+            mark.style.color = "#2e7d32";
         }
 
-        // 不正解の場合、正解の選択肢に表示
-        const correctChoice = (currentQMode === 1)
-            ? current.meaning
-            : current.word;
-
-        if (!isCorrect && w.id === current.id) {
-            const answerMark = document.createElement("div");
-            answerMark.textContent = "👉 正解はこれ！";
-            answerMark.style.fontWeight = "bold";
-            answerMark.style.color = "#1565c0";
-            item.appendChild(answerMark);
-        }
-
-        choiceMeanings.appendChild(item);
+        // 回答後は選択肢を無効化
+        row.querySelector("button").disabled = true;
     });
 }
 
