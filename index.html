@@ -1097,11 +1097,18 @@ function judgeSelfAnswer(isCorrect) {
     document.getElementById("selfCorrectBtn").disabled = true;
     document.getElementById("selfWrongBtn").disabled = true;
 
-    // 次へ進むボタンを表示
-    nextBtn.textContent = "次へ";
-    nextBtn.style.display = "inline-block";
+	// 正解なら自動で次の問題へ進む
+	if (isCorrect) {
+	    nextBtn.style.display = "none";
 
-    
+	    setTimeout(() => {
+	        nextQuestion();
+	    }, 500);
+	} else {
+	    // 間違いなら「次へ」ボタンを表示
+	    nextBtn.textContent = "次へ";
+	    nextBtn.style.display = "inline-block";
+	}
     
 	const userAnswer =
 	    document.getElementById("selfAnswerInput").value.trim();
