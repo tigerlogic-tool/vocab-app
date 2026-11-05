@@ -779,19 +779,27 @@ function nextQuestion() {
 	    ? current.word
 	    : current.meaning;
 
-	// モード1かつ5列CSVの場合だけヒントを追加
-	if (qMode === 1 && current.hasFiveColumns && current.hint) {
-	    displayText += "\n" + current.hint;
-	}
 
-	// ★⑥ 復習フェーズならラベル追加
+
+
 	if (phase === 2) {
 	    displayText = "【復習】" + displayText;
 	}
 
-	// ★⑦ 表示
-	word.style.whiteSpace = "pre-line";
-	word.textContent = displayText;
+	word.innerHTML = "";
+
+	const questionText = document.createElement("div");
+	questionText.textContent = displayText;
+	word.appendChild(questionText);
+
+	if (qMode === 1 && current.hasFiveColumns && current.hint) {
+	    const hintText = document.createElement("div");
+	    hintText.textContent = current.hint;
+	    hintText.style.fontSize = "16px";
+	    hintText.style.fontWeight = "normal";
+	    hintText.style.marginTop = "10px";
+	    word.appendChild(hintText);
+	}
 
 
 
