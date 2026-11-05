@@ -274,9 +274,21 @@ function showChoiceMeanings(selectedWord, isCorrect, isUnknown = false) {
         const mark = row.querySelector(".choice-mark");
         const detail = row.querySelector(".choice-detail");
 
-        // 回答後にすべての選択肢の英単語と意味を表示
-        detail.textContent = w.word + " — " + w.meaning;
-        detail.style.display = "block";
+
+
+
+
+		// モード1かつ5列CSVの場合だけ補足を表示
+		if (currentQMode === 1 && w.hasFiveColumns) {
+		    detail.textContent = w.supplement || w.meaning;
+		} else {
+		    detail.textContent = w.word + " — " + w.meaning;
+		}
+
+		detail.style.display = "block";
+
+
+
 
         mark.textContent = "";
 
@@ -435,14 +447,25 @@ function loadCSV(fileName) {
         let lines = text.split(/\r?\n/);
         lines.shift();
 
-        words = lines.map(line => {
-            let cols = line.includes("\t") ? line.split("\t") : line.split(",");
-            return {
-                id: Number(cols[0]),
-                word: cols[1]?.trim(),
-                meaning: cols[2]?.trim()
-            };
-        }).filter(w => w.id && w.word && w.meaning);
+
+
+
+
+		words = lines.map(line => {
+		    let cols = line.includes("\t") ? line.split("\t") : line.split(",");
+		    return {
+		        id: Number(cols[0]),
+		        word: cols[1]?.trim(),
+		        meaning: cols[2]?.trim(),
+		        hint: cols[3]?.trim() || "",
+		        supplement: cols[4]?.trim() || "",
+		        hasFiveColumns: cols.length >= 5
+		    };
+		}).filter(w => w.id && w.word && w.meaning);
+
+
+
+
 
         words.sort((a,b)=>a.id-b.id);
 
@@ -744,16 +767,35 @@ function nextQuestion() {
         unseenWords = unseenWords.filter(w => w.id !== current.id);
     }
 
-    // ★⑤ 表示テキスト生成（←これ必要）
-    let displayText = (qMode === 1) ? current.word : current.meaning;
 
-    // ★⑥ 復習フェーズならラベル追加
-    if (phase === 2) {
-        displayText = "【復習】" + displayText;
-    }
 
-    // ★⑦ 表示
-    word.textContent = displayText;
+
+
+
+
+
+	// ★⑤ 表示テキスト生成
+	let displayText = (qMode === 1)
+	    ? current.word
+	    : current.meaning;
+
+	// モード1かつ5列CSVの場合だけヒントを追加
+	if (qMode === 1 && current.hasFiveColumns && current.hint) {
+	    displayText += "\n" + current.hint;
+	}
+
+	// ★⑥ 復習フェーズならラベル追加
+	if (phase === 2) {
+	    displayText = "【復習】" + displayText;
+	}
+
+	// ★⑦ 表示
+	word.style.whiteSpace = "pre-line";
+	word.textContent = displayText;
+
+
+
+
 
 
 	// モード4：入力式・自己判定
@@ -865,9 +907,17 @@ function checkAnswer(choice, qMode, selectedWord) {
 		// 正解なら自動で次の問題へ進む
 		nextBtn.style.display = "none";
 
+
+
+
+
+
+
 		setTimeout(function () {
 		    nextQuestion();
-		}, 500);
+		}, currentQMode === 1 && current.hasFiveColumns ? 3000 : 500);
+
+
 
 	} else {
 	    handleWrong(qMode);
