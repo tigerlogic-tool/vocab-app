@@ -904,20 +904,16 @@ function checkAnswer(choice, qMode, selectedWord) {
 	        w => w.id !== current.id
 	    );
 
-		// 正解なら自動で次の問題へ進む
-		nextBtn.style.display = "none";
+		// 正解なら、モード1＋5列CSVでは「次へ」ボタンを表示する
+		if (currentQMode === 1 && current.hasFiveColumns) {
+		    nextBtn.style.display = "inline-block";
+		} else {
+		    nextBtn.style.display = "none";
 
-
-
-
-
-
-
-		setTimeout(function () {
-		    nextQuestion();
-		}, currentQMode === 1 && current.hasFiveColumns ? 3000 : 500);
-
-
+		    setTimeout(function () {
+		        nextQuestion();
+		    }, 500);
+		}
 
 	} else {
 	    handleWrong(qMode);
