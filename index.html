@@ -120,7 +120,7 @@ input, select {
 <br>
 
 選択肢数：
-<input type="number" id="choiceCount" value="8" min="8" max="10">
+<input type="number" id="choiceCount" value="4" min="4" max="10">
 
 <br>
 <button onclick="applyRange()">開始</button>
@@ -520,7 +520,7 @@ function validateInputs(start, end, choiceCount) {
     if (start < 1 || start > maxId) return alert("開始は1～" + maxId), false;
     if (end < 1 || end > maxId) return alert("終了は1～" + maxId), false;
     if (start > end) return alert("開始＞終了"), false;
-    if (choiceCount < 8 || choiceCount > 10) return alert("選択肢は8～10"), false;
+    if (choiceCount < 4 || choiceCount > 10) return alert("選択肢は4～10"), false;
     let count = words.filter(w => w.id >= start && w.id <= end).length;
     if (count < choiceCount) return alert("単語数が選択肢数より少ない"), false;
     return true;
@@ -788,9 +788,25 @@ function nextQuestion() {
 
 	word.innerHTML = "";
 
+
 	const questionText = document.createElement("div");
-	questionText.textContent = displayText;
+
+	// []内の単語を赤色にする
+	const parts = displayText.split(/(\[[^\]]+\])/g);
+
+	parts.forEach(part => {
+	    if (part.startsWith("[") && part.endsWith("]")) {
+	        const span = document.createElement("span");
+	        span.textContent = part.slice(1, -1);
+	        span.style.color = "red";
+	        questionText.appendChild(span);
+	    } else {
+	        questionText.appendChild(document.createTextNode(part));
+	    }
+	});
+
 	word.appendChild(questionText);
+
 
 	if (qMode === 1 && current.hasFiveColumns && current.hint) {
 	    const hintText = document.createElement("div");
@@ -800,9 +816,6 @@ function nextQuestion() {
 	    hintText.style.marginTop = "10px";
 	    word.appendChild(hintText);
 	}
-
-
-
 
 
 
@@ -912,16 +925,14 @@ function checkAnswer(choice, qMode, selectedWord) {
 	        w => w.id !== current.id
 	    );
 
-		// 正解なら、モード1＋5列CSVでは「次へ」ボタンを表示する
-		if (currentQMode === 1 && current.hasFiveColumns) {
-		    nextBtn.style.display = "inline-block";
-		} else {
-		    nextBtn.style.display = "none";
 
-		    setTimeout(function () {
-		        nextQuestion();
-		    }, 500);
-		}
+		// 正解なら「次へ」ボタンを表示せず、自動で次の問題へ進む
+		nextBtn.style.display = "none";
+
+		setTimeout(function () {
+		    nextQuestion();
+		}, 500);
+
 
 	} else {
 	    handleWrong(qMode);
